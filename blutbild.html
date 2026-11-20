@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="de" translate="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Blutbild via OCR</title>
+  <meta name="description" content="Blutbild-Verlauf: OCR-Scans und Trendcharts – vollständig clientseitig.">
+
+  <!-- PWA / Web App Manifest -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="shortcut icon" href="favicon.ico">
+
+  <!-- iOS Safari Home Screen -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Blutbild">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="apple-touch-icon-precomposed" href="apple-touch-icon-precomposed.png">
+
+  <!-- Theme colour (Android Chrome address bar) -->
+  <meta name="theme-color" content="#0b0f19">
+
+  <!-- Tells the browser up front that this page is dark-only, so it paints
+       the initial canvas background dark from the very first frame instead
+       of its default white — this is what actually stops the white/black
+       flash before style.css takes effect (the boot loader below covers the
+       body markup, but without this the canvas itself still flashes white
+       first). -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html { background: #0b0f19; }
+  </style>
+
+  <!-- Inline, dependency-free critical CSS for the boot loader below.
+       On a slow/offline start the external stylesheet can take a moment to
+       resolve (network-first fetch via the service worker before falling
+       back to cache), and a stylesheet <link> blocks ALL page rendering
+       until it resolves. This inline block needs no network round-trip, so
+       it paints immediately and gives an instant sign of life instead of a
+       blank/dark screen. -->
+  <style>
+    #boot-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      background: #0b0f19;
+      color: #cbd5e1;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      transition: opacity 0.25s ease;
+    }
+    #boot-loader.boot-loader-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #boot-loader-spinner {
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 50%;
+      border: 3px solid rgba(203, 213, 225, 0.25);
+      border-top-color: #6366f1;
+      animation: boot-loader-spin 0.8s linear infinite;
+    }
+    #boot-loader-status {
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 0 1.5rem;
+    }
+    @keyframes boot-loader-spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+
+  <!-- style.css loaded non-render-blocking (preload + swap) so the boot
+       loader above can paint immediately instead of waiting behind it. -->
+  <link rel="preload" href="style.css" as="style" onload="this.onload=null;this.rel='stylesheet';window.__onAppStylesReady && window.__onAppStylesReady();">
+  <noscript>
+    <link rel="stylesheet" href="style.css">
+    <!-- No JS means the loader below can never be dismissed programmatically — don't show it. -->
+    <style>#boot-loader { display: none !important; }</style>
+  </noscript>
+
+  <!-- Import Map for CDN module resolution -->
+  <!-- Maps bare module specifiers to CDN URLs for PaddleOCR.js dependencies -->
+  <script type="importmap">
+    {
+      "imports": {
+        "js-yaml": "https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/+esm",
+        "yaml": "https://cdn.jsdelivr.net/npm/yaml@2.3.0/+esm",
+        "clipper-lib": "data:text/javascript;base64,ZXhwb3J0IGRlZmF1bHQgd2luZG93LkNsaXBwZXJMaWI7",
+        "@techstark/opencv-js": "data:text/javascript;base64,ZXhwb3J0IGRlZmF1bHQgd2luZG93LmN2Ow==",
+        "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.bundle.min.mjs"
+      }
+    }
+  </script>
+  <!-- Konfiguration: öffentlich (config-system.js) + persönlich (config-user.js,
+       optional, nicht im Repository) → APP_CONFIG; lädt auch private Module. -->
+  <script src="config-system.js"></script>
+  <script src="config-user.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+
+  <!-- Boot loader: immediate sign of life while style.css/app.js/CDN scripts
+       resolve, especially on a slow or offline first paint. Hidden once
+       style.css has actually loaded (see __onAppStylesReady below), with a
+       timeout fallback in case that event never fires. -->
+  <div id="boot-loader">
+    <div id="boot-loader-spinner"></div>
+    <div id="boot-loader-status">App wird geladen …</div>
+  </div>
+  <script>
+    (function () {
+      var statusEl = document.getElementById('boot-loader-status');
+      if (statusEl) {
+        statusEl.textContent = navigator.onLine
+          ? 'App wird geladen …'
+          : 'Offline-Modus – lokale Daten werden geladen …';
+      }
+
+      function hideBootLoader() {
+        var el = document.getElementById('boot-loader');
+        if (!el) return;
+        el.classList.add('boot-loader-hidden');
+        setTimeout(function () { el.remove(); }, 300);
+      }
+
+      window.__onAppStylesReady = hideBootLoader;
+      // Safety net: never let the loader block the app if the stylesheet's
+      // onload doesn't fire for some reason (old browser, unexpected error).
+      setTimeout(hideBootLoader, 5000);
+    })();
+  </script>
+
+  <header>
+    <div class="title-container">
+      <h1>Blutbild via OCR</h1>
+    </div>
+    <div class="header-status">
+      <div class="cdn-badge">
+        <div class="cdn-dot" id="cdn-status-dot"></div>
+        <span id="cdn-status-text">Connecting PaddleOCR CDN...</span>
+      </div>
+    </div>
+    <div id="hbm-root"></div>
+  </header>
+
+  <!-- Seitenkopf nur im Druck sichtbar -->
+  <div class="print-header" id="print-header">
+    <span class="print-header-title">Blutbild via OCR</span>
+    <span class="print-header-meta" id="print-header-meta">Letzter Scan: —</span>
+  </div>
+
+  <main>
+    <!-- 1. Neue Daten hinzufügen (Kamera / TXT) -->
+    <section class="glass-panel add-data-section" aria-label="Neue Messdaten">
+      <div class="add-data-buttons">
+        <button id="btn-add-image" class="btn btn-primary btn-add-data">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          OCR
+        </button>
+        <button id="btn-add-txt" class="btn btn-secondary btn-add-data">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9l7 7v9a2 2 0 0 1-2 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          TXT
+        </button>
+        <button id="btn-add-pdf" class="btn btn-secondary btn-add-data">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9l7 7v9a2 2 0 0 1-2 2z"/><polyline points="14 2 14 8 20 8"/><text x="12" y="18" font-size="7" font-weight="bold" text-anchor="middle" stroke="none" fill="currentColor">PDF</text></svg>
+          PDF
+        </button>
+      </div>
+      <input type="file" id="image-input" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="txt-input" accept=".txt,text/plain" multiple style="display:none">
+      <input type="file" id="pdf-input" accept="application/pdf,.pdf" multiple style="display:none">
+    </section>
+
+    <!-- 2. Workspace: Bild-Viewer (mit Crop-Canvas) + OCR-Output + Datei-Galerie
+         Direkt nach den Add-Buttons, damit Bild und OCR-Text sofort sichtbar sind.
+         Ordner-Workflow: Galerie (Sidebar) füllt sich nach Directory-Auswahl (unten). -->
+    <section class="workspace-layout" aria-label="OCR Workspace">
+      <!-- Preview & Results Viewer (content zuerst → auf Mobile oben) -->
+      <article class="glass-panel content-panel">
+        <div class="content-header" id="viewer-header" style="visibility: hidden;">
+          <div class="content-title-area">
+            <h2 class="content-title" id="active-file-name">active_file.png</h2>
+            <span class="content-path" id="active-file-path">/path/to/active_file.png</span>
+          </div>
+          <div class="actions-group">
+            <button class="btn btn-secondary" id="btn-copy-text" style="padding: 0.5rem 1rem; font-size: 0.85rem;" title="Copy scanned text to clipboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              Copy Text
+            </button>
+            <button class="btn btn-secondary" id="btn-download-text" style="padding: 0.5rem 1rem; font-size: 0.85rem;" title="Download scanned text as file">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2-2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              Download Text
+            </button>
+          </div>
+        </div>
+
+        <div class="split-viewer" id="split-viewer-panel">
+          <!-- Bild mit Crop-Canvas -->
+          <div class="viewer-section image-section">
+            <div class="image-canvas-wrapper" id="image-canvas-container">
+              <img id="main-preview-img" class="preview-img" src="" alt="Active Image Preview" style="display: none;">
+              <canvas id="crop-canvas" class="crop-canvas"></canvas>
+            </div>
+            <div id="crop-toolbar" class="crop-toolbar">
+              <button id="btn-scan-full"  class="btn btn-primary"   style="font-size:0.82rem; padding:0.45rem 1rem;">Vollbild scannen</button>
+              <button id="btn-crop-scan"  class="btn btn-success"   style="font-size:0.82rem; padding:0.45rem 1rem;">Ausschnitt scannen</button>
+              <button id="btn-crop-reset" class="btn btn-secondary" style="font-size:0.82rem; padding:0.45rem 0.8rem;">Zurücksetzen</button>
+            </div>
+            <!-- Empty state -->
+            <div class="empty-state" id="viewer-empty-state">
+              <span class="empty-icon">🖼️</span>
+              <h3>No Image Selected</h3>
+              <p>Select a matching file from the gallery to display details</p>
+            </div>
+          </div>
+
+          <!-- OCR-Output -->
+          <div class="viewer-section text-section">
+            <div class="text-section-header">
+              <label for="search-results-input" style="margin-bottom: 0;">OCR Output</label>
+              <input type="text" id="search-results-input" class="search-text-input" placeholder="Search in output..." disabled>
+            </div>
+            <div class="ocr-result-area" id="ocr-results-content">Select an image to see its scanned text.</div>
+            <div id="ocr-corrections" class="ocr-corrections" style="display:none;"></div>
+          </div>
+        </div>
+      </article>
+
+      <!-- Datei-Galerie (Sidebar) – für Ordner-Workflow -->
+      <aside class="glass-panel sidebar-panel">
+        <div class="sidebar-header">
+          <span class="sidebar-title">Matching Gallery</span>
+          <button id="btn-clear" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" disabled>Clear</button>
+        </div>
+        <div class="file-list" id="file-list-container">
+          <div class="empty-state" id="sidebar-empty-state">
+            <span class="empty-icon">📂</span>
+            <h3>No Directory Selected</h3>
+            <p>Load a folder to scan and filter its contents</p>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- 3. Ordner-Controls (Verzeichnis, Filter, OCR-Scanner) -->
+    <section class="glass-panel control-grid" aria-label="OCR Scan Controls">
+      <div class="control-group">
+        <label for="btn-select-dir">Source Directory</label>
+        <div class="input-wrapper">
+          <button id="btn-select-dir" class="btn btn-primary" style="width: 100%;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></svg>
+            Select Directory
+          </button>
+          <input type="file" id="dir-picker-fallback" webkitdirectory directory multiple style="display: none;">
+        </div>
+        <span class="checkbox-label" style="margin-top: 0.5rem; justify-content: center;" id="dir-method-badge">
+          System Access API supported
+        </span>
+      </div>
+
+      <div class="control-group">
+        <label for="filter-pattern">Filename Pattern Filter</label>
+        <input type="text" id="filter-pattern" placeholder="e.g., invoice* or screen_*.png" value="*">
+        <label class="checkbox-label">
+          <input type="checkbox" id="regex-mode">
+          <span>Interpret as Regular Expression (Regex)</span>
+        </label>
+      </div>
+
+      <div class="control-group">
+        <label for="language-select">OCR Target Language</label>
+        <select id="language-select">
+          <option value="en" selected>English</option>
+          <option value="ch">Chinese Simplified</option>
+          <option value="chinese_cht">Chinese Traditional</option>
+          <option value="japan">Japanese</option>
+        </select>
+        <button id="btn-run-ocr" class="btn btn-success" style="margin-top: auto;" disabled>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          Run OCR Scanner
+        </button>
+      </div>
+    </section>
+
+    <!-- 4. Fortschritt (nur während Scan sichtbar) -->
+    <section class="glass-panel progress-panel" id="overall-progress-panel" style="display: none;" aria-label="Scanning Progress">
+      <div class="progress-header">
+        <span class="progress-status" id="scan-status-text">Preparing scanner workers...</span>
+        <span class="progress-pct" id="scan-status-pct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-bar shimmer" id="scan-progress-bar"></div>
+      </div>
+    </section>
+
+    <!-- 5. Statistiken -->
+    <section class="stats-container" aria-label="Scanner Metrics">
+      <div class="glass-panel stat-card">
+        <span class="stat-label">Total Files Discovered</span>
+        <span class="stat-value" id="stat-total">0</span>
+      </div>
+      <div class="glass-panel stat-card">
+        <span class="stat-label">Matching Files</span>
+        <span class="stat-value" id="stat-matching" style="color: var(--primary);">0</span>
+      </div>
+      <div class="glass-panel stat-card stat-success">
+        <span class="stat-label">Processed</span>
+        <span class="stat-value" id="stat-scanned" style="color: var(--success);">0</span>
+      </div>
+    </section>
+
+    <!-- Analytics Dashboard & Trends Section -->
+    <section class="glass-panel analytics-panel" id="analytics-section" aria-label="Scanned Data Analytics">
+      <div class="analytics-header">
+        <h2>Blutbild Analytics & Trends</h2>
+      </div>
+
+
+      <!-- Line Charts Grid -->
+      <div class="charts-section">
+        <h3>Blutwerte Verlauf</h3>
+        <div class="charts-grid" id="charts-container">
+          <!-- Dynamic canvas cards go here -->
+          <div class="empty-state" id="charts-empty-state">
+            <span class="empty-icon" style="font-size: 2.5rem;">📊</span>
+            <h3>No Trend Charts Generated</h3>
+            <p>Line charts will appear here for each unique abbreviation (e.g., HR, TEMP) found across files.</p>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Interactive Toast Box -->
+  <div class="toast" id="toast-notification" role="status" aria-live="polite">
+    <span class="toast-icon">ℹ️</span>
+    <span id="toast-text">Toast message</span>
+  </div>
+
+  <!-- OpenCV.js loading popup: shown by app.js (showOpenCVLoader) only when
+       initialisation takes longer than a moment; counts up to the 30 s limit. -->
+  <div class="toast opencv-loader" id="opencv-loader" role="status" aria-live="polite">
+    <span class="toast-icon" id="opencv-loader-icon">⏳</span>
+    <div class="opencv-loader-body">
+      <span id="opencv-loader-text">OpenCV.js wird geladen …</span>
+      <div class="opencv-loader-bar"><div id="opencv-loader-fill"></div></div>
+    </div>
+    <button type="button" class="opencv-loader-close" id="opencv-loader-close" aria-label="Schließen">✕</button>
+  </div>
+
+  <footer>
+    <p>Obsidian OCR Engine &bull; Stand-alone Client-side Tool &bull; Powered by PaddleOCR.js CDN</p>
+  </footer>
+
+  <!-- Global status flag for async library loading -->
+  <script>
+    window.openCVReady = false;
+    window.openCVError = null;
+    
+    // Set up OpenCV.js initialization callback
+    // OpenCV.js requires using cv.onRuntimeInitialized callback
+    // Late readiness (after the 30 s timeout, e.g. while paused in the
+    // debugger) clears the stale timeout error; 'opencv-ready' lets app.js
+    // turn its status badge green again.
+    function onOpenCVReady() {
+      window.openCVReady = true;
+      window.openCVError = null;
+      console.log('OpenCV.js loaded and ready');
+      window.dispatchEvent(new Event('opencv-ready'));
+    }
+
+    // `onload` fires whenever the <script> tag receives any response body
+    // (even an empty one, e.g. from a browser extension/ad-blocker/service
+    // worker substituting a stub). Guard against `cv` not actually being
+    // defined instead of crashing with a ReferenceError.
+    function handleOpenCVLoad() {
+      if (typeof cv === 'undefined') {
+        window.openCVError = 'OpenCV.js script loaded but did not define `cv` (blocked by a browser extension/shield?)';
+        console.error(window.openCVError);
+        return;
+      }
+      cv.onRuntimeInitialized = onOpenCVReady;
+    }
+    
+    window.waitForOpenCV = function() {
+      return new Promise((resolve, reject) => {
+        if (window.openCVReady) {
+          resolve();
+        } else if (window.openCVError) {
+          reject(new Error(window.openCVError));
+        } else {
+          const checkInterval = setInterval(() => {
+            if (window.openCVReady) {
+              clearInterval(checkInterval);
+              clearTimeout(timeoutHandle);
+              resolve();
+            }
+          }, 100);
+          
+          // Timeout after 30 seconds
+          const timeoutHandle = setTimeout(() => {
+            clearInterval(checkInterval);
+            if (!window.openCVReady) {
+              window.openCVError = 'OpenCV.js loading timeout';
+              reject(new Error('OpenCV.js failed to load within 30 seconds'));
+            }
+          }, 30000);
+        }
+      });
+    };
+  </script>
+
+  <!-- OpenCV.js - Uses WASM backend with Web Worker support -->
+  <!-- The library will call cv.onRuntimeInitialized when ready -->
+  <!-- Byte-identical copy of docs.opencv.org/4.5.2/opencv.js (same SHA-256),
+       served by jsDelivr WITH CORS headers: sw.js can see the real HTTP
+       status, retry transient 5xx errors and never cache an error page.
+       docs.opencv.org sends no CORS headers (opaque responses, status
+       invisible) and answered 503 now and then. -->
+  <script async src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.5.2-release.1/dist/opencv.js" crossorigin="anonymous"
+    onload="handleOpenCVLoad();"
+    onerror="window.openCVError = 'Failed to load OpenCV.js from CDN'; console.error('OpenCV.js failed to load from cdn.jsdelivr.net');"></script>
+  <!-- clipper-lib loaded as a plain script so window.ClipperLib is available for clipper-shim.js.
+       crossorigin="anonymous" on every jsDelivr script (it sends CORS headers):
+       without it the response is opaque and sw.js can't verify it. -->
+  <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js" crossorigin="anonymous"></script>
+  <!-- Chart.js, pinned: an unversioned URL would silently pull in the next major version -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+  <!-- Global abbreviation tooltip -->
+  <div id="abbr-tooltip"></div>
+  <!-- Shared blood-marker data layer (also used standalone by radar.html/befund.html) -->
+  <script src="blood-data.js"></script>
+  <!-- Main Script -->
+  <script src="app.js"></script>
+
+  <!-- Service Worker registration. The actual update-checking/applying flow
+       (manual, button-triggered only — no automatic prompts) lives in
+       update.js, shared by every page of this app. -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      // updateViaCache: 'none' forces the browser to bypass its own HTTP
+      // cache whenever it fetches sw.js for an update check (both the
+      // implicit check on every register() call and our explicit
+      // registration.update() in update.js). Without this, a server that
+      // doesn't send strict no-cache headers for sw.js can cause the browser
+      // to compare against a stale cached copy of the script — "Aktuell"
+      // gets reported even though a genuinely newer version is deployed,
+      // and only a full "Empty Cache and Hard Reload" picks it up.
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
+
+      // On first install (or right after an update), this page load was
+      // served before the service worker took control, so it is NOT yet
+      // running offline-capable. Tell the user to reload instead of letting
+      // them believe the app already works fully offline.
+      window.addEventListener('load', () => {
+        if (!navigator.serviceWorker.controller) {
+          showOfflineHintBanner();
+        }
+      });
+    } else {
+      showOfflineHintBanner('&#x26A0;&#xFE0F; Offline-Modus wird von diesem Browser nicht unterstützt');
+    }
+
+    function showOfflineHintBanner(message) {
+      const banner = document.createElement('div');
+      banner.id = 'offline-hint-banner';
+      banner.innerHTML = `<span>${message || '&#x1F4F5; App neu laden für vollen Offline-Modus'}</span><button>Neu laden</button>`;
+      banner.querySelector('button').addEventListener('click', () => location.reload());
+      document.body.appendChild(banner);
+    }
+  </script>
+  <div id="hbm-page-slot" hidden>
+    <button class="hbm-item" id="btn-blutbild-json-export">⬇ JSON exportieren (Blutbild)</button>
+    <button class="hbm-item" id="btn-blutbild-json-import">⬆ JSON importieren (Blutbild)</button>
+    <input type="file" id="blutbild-json-import-input" accept=".json,application/json" style="display:none">
+  </div>
+  <!-- Must come before update.js/bulk-import.js — both look up header-menu-
+       generated elements (#app-version, #btn-update, #btn-bulk-export, ...)
+       immediately at script-run time, not on DOMContentLoaded. -->
+  <script src="header-menu.js"></script>
+  <script>createHeaderMenu({ current: 'blutbild', onlineStatus: true });</script>
+  <script src="update.js"></script>
+  <script src="save-file.js"></script>
+  <script src="bulk-import.js"></script>
+</body>
+</html>

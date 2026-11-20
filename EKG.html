@@ -1,0 +1,906 @@
+<!doctype html>
+<html lang="de" translate="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QT & Herzzyklus — synchronisierte Animation</title>
+<style>
+  :root{
+    --ink:#080b12; --panel:#0f1522; --panel2:#0c111c; --line:#223049;
+    --text:#e7edf7; --muted:#8698b4;
+    --trace:#dbe9ff; --grid:#ff5a64;
+    --tan:#ffb020; --thr:#31d6c6; --qt:#a78bfa; --start:#7f93b4; --hf:#60a5fa;
+    --now:#f8fafc;
+    --blue:#3f7fc4; --blueS:#7fb0e6; --red:#cf4b5e; --redS:#ef8a99; --wall:#26324a;
+    --ok:#34d399; --warn:#fbbf24; --hot:#fb7185; --crit:#f43f5e;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:radial-gradient(1200px 600px at 78% -10%,#10203a55,transparent 60%),var(--ink);
+    color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.45;padding:clamp(12px,2.6vw,30px);}
+  .wrap{max-width:1120px;margin:0 auto}
+  .eyebrow{font:600 12px/1.2 ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--tan);display:flex;align-items:center;gap:10px;margin:0 0 8px}
+  .eyebrow::before{content:"";width:26px;height:1px;background:var(--tan);opacity:.7}
+  h1{font-size:clamp(21px,3.6vw,34px);font-weight:680;letter-spacing:-.02em;margin:0 0 6px}
+  h1 em{font-style:normal;color:var(--muted);font-weight:400}
+  .lede{color:var(--muted);max-width:70ch;margin:0 0 18px;font-size:14.5px}
+
+  .studio{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:14px;align-items:start}
+  /* The near-square heart diagram (320:340) doesn't need much width, while
+     the EKG panel's wide 1000:470 trace — the actually interesting part —
+     benefits from as much width as it can get; layout()/relayout() below
+     also actively re-measures the panel and rebuilds the SVG to fit,
+     instead of relying on a single static breakpoint. */
+  @media (max-width:760px){ .studio{grid-template-columns:1fr} #heart{max-height:36vh} }
+  @media (min-width:761px){ #heart{max-height:none} }
+  .panel{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+    border-radius:16px;padding:10px;box-shadow:0 24px 60px -30px #000,inset 0 1px 0 #ffffff08;
+    display:flex;flex-direction:column;min-width:0}
+  .panel svg{display:block;width:100%;height:auto;flex:0 0 auto;min-height:0}
+  .badge{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 12px;margin:2px 4px 8px;font-size:13px}
+  .badge .phase{font-weight:700; flex: 0 0 100%;}
+  .badge .meta{color:var(--muted);font:600 12px ui-monospace,Menlo,Consolas,monospace}
+  .badge .s{display:inline-block;min-width:26px;text-align:center;font:700 11px ui-monospace,monospace;
+    padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);opacity:.35;cursor:help}
+  /* Tooltip-fähige Herz-Strukturen (native SVG <title>) als solche kenntlich machen */
+  #heart #chambers .chamber,#heart #valves>g{cursor:help}
+  .badge .s.on{opacity:1;color:#0b111c;background:var(--warn);border-color:var(--warn)}
+
+  .commentary{margin-top:14px;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:14px 17px}
+  .commentary[hidden]{display:none}
+  .ck{font:700 13.5px ui-sans-serif,system-ui;color:var(--text);margin-bottom:7px;
+    display:flex;align-items:baseline;gap:9px}
+  .cb{margin:0;font-size:13.5px;line-height:1.58;color:#cfdaee;max-width:78ch}
+  .cx{margin:9px 0 0;padding-top:9px;border-top:1px solid var(--line);
+    font-size:12.5px;line-height:1.55;color:var(--muted);max-width:78ch}
+  .cx[hidden]{display:none}
+  .play.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  .play.ghost.on{background:var(--hf);color:#06121f;border-color:var(--hf)}
+  .risk{margin:2px 0 12px}
+  .riskhead{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--muted)}
+  .riskhead b{font:700 15px ui-monospace,Menlo,Consolas,monospace}
+  .riskbar{height:9px;border-radius:6px;background:#22314b;overflow:hidden;margin:6px 0 8px}
+  .riskbar span{display:block;height:100%;border-radius:6px}
+  .riskparts{display:flex;flex-wrap:wrap;gap:5px 7px}
+  .rp{font:600 11px ui-monospace,Menlo,Consolas,monospace;padding:2px 8px;border-radius:999px;
+    border:1px solid var(--line);color:var(--muted)}
+  .rp.on{color:#0b111c;border-color:transparent}
+  .vuln-lbl{fill:var(--crit);font:600 10.5px ui-monospace,Menlo,Consolas,monospace;opacity:.92}
+  .play.danger{background:var(--crit);color:#fff}
+  .play.danger.on{background:var(--warn);color:#0b111c}
+  .transport .tdpnote{color:var(--muted);font-size:12px;flex-basis:100%;margin-top:-4px}
+  .trace{fill:none;stroke:var(--trace);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round;
+    filter:drop-shadow(0 0 5px #bcd4ff70)}
+  .trace-ghost{opacity:.45;filter:none}
+  .rot-mark{stroke:var(--crit);stroke-width:1.4;stroke-dasharray:5 4;stroke-opacity:.75}
+  .rot-lbl{fill:var(--crit);font:600 10.5px ui-monospace,Menlo,Consolas,monospace;opacity:.92}
+  .axis-txt{fill:var(--muted);font:500 11px ui-monospace,Menlo,Consolas,monospace}
+  .wave-lbl{fill:#64769a;font:600 12px ui-sans-serif,system-ui}
+  .h-line{transition:all .1s linear}
+  #scrub{fill:transparent;cursor:crosshair;touch-action:none;pointer-events:all}
+  .chamber ellipse{transition:none}
+  .vlbl{fill:#c9d6ef;font:700 13px ui-sans-serif,system-ui}
+  .vlbl.r{fill:#ffe1e6}
+  .tag-lbl{fill:#9cc0ea;font:600 11px ui-sans-serif,system-ui}
+  .tag-lbl.r{fill:#f3b3bd}
+  @media (prefers-reduced-motion:reduce){ .h-line{transition:none} }
+
+  .transport{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-top:14px;
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+  .play{display:inline-flex;align-items:center;gap:9px;background:var(--qt);color:#0b061c;border:0;
+    font:700 14px ui-sans-serif,system-ui;padding:9px 16px;border-radius:10px;cursor:pointer}
+  .play:focus-visible{outline:2px solid var(--now);outline-offset:3px}
+  .play .ico{font-size:13px}
+  .slow{display:flex;align-items:center;gap:10px;flex:1;min-width:220px}
+  .slow label{font-size:13px;white-space:nowrap}
+  .slow .val{font:700 13px ui-monospace,Menlo,Consolas,monospace;color:var(--hf);min-width:92px;text-align:right}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:24px;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:5px;background:#22314b}
+  input[type=range]::-moz-range-track{height:6px;border-radius:5px;background:#22314b}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;
+    background:var(--text);border:3px solid #0b1120;margin-top:-6px;box-shadow:0 0 0 1px #ffffff30}
+  input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--text);border:3px solid #0b1120}
+  input[type=range]:focus-visible{outline:2px solid currentColor;outline-offset:5px;border-radius:8px}
+  .hint{color:var(--muted);font-size:12px;margin-top:-2px}
+  .transport .hint{flex-basis:100%}
+  .panel .hint{flex:0 0 auto;margin:8px 4px 2px}
+
+  details{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:0 16px}
+  summary{cursor:pointer;padding:14px 0;font:600 12px ui-monospace,Menlo,Consolas,monospace;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--muted);list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"▸ ";color:var(--qt)}
+  details[open] summary::before{content:"▾ "}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px 22px;padding-bottom:16px}
+  @media (max-width:640px){ .grid2{grid-template-columns:1fr} }
+  .ctl{padding:10px 0}
+  .sh{display:flex;justify-content:space-between;align-items:baseline}
+  .sh .name{font-size:13.5px}.sh .v{font:700 14px ui-monospace,Menlo,Consolas,monospace}
+  #qtCtl .v{color:var(--qt)} #hfCtl .v{color:var(--hf)} #thrCtl .v{color:var(--thr)}
+  .rl{display:flex;justify-content:space-between;color:var(--muted);font:500 10.5px ui-monospace,monospace;margin-top:3px}
+  .read{width:100%;border-collapse:collapse;font-size:13px}
+  .read td{padding:6px 0;border-top:1px solid var(--line)}
+  .read td:first-child{color:var(--muted)}
+  .read td:last-child{text-align:right;font:600 13px ui-monospace,Menlo,Consolas,monospace}
+  .verdict{display:flex;align-items:baseline;gap:9px;margin:4px 0}
+  .verdict .big{font:700 32px/1 ui-monospace,Menlo,Consolas,monospace}
+  .verdict .u{color:var(--muted);font:500 12px ui-monospace,monospace}
+  .tag{display:inline-block;font:600 12px ui-sans-serif,system-ui;padding:2px 10px;border-radius:999px;border:1px solid currentColor;margin:2px 0 8px}
+  .warn{display:none;margin:10px 0 0;padding:8px 11px;border-radius:10px;font-size:12.5px;background:#f43f5e18;border:1px solid #f43f5e55;color:#fecdd3}
+  .warn.on{display:block}
+  .note{color:var(--muted);font-size:12px;margin-top:12px;line-height:1.5}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:8px 4px 2px}
+  .chip{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+  .chip i{width:14px;height:0;border-top-width:3px;border-top-style:solid;border-radius:2px}
+  .chip b{width:10px;height:10px;border-radius:50%;display:inline-block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="data.html" style="display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px;text-decoration:none;margin-bottom:10px;">← Zurück zu den Zeitreihen</a>
+  <p class="eyebrow">Herzzyklus · Wiggers · KardiaMobile</p>
+  <h1>QT & Herzmechanik <em>— synchronisierte Animation</em></h1>
+  <p class="lede">Die „now"-Linie wandert über das EKG; das schematische Herz zeigt phasengleich Kammern,
+    Klappen und Blutfluss. Steuerung per Cursor über dem EKG (Scrubbing) oder als Auto-Schleife, Tempo per Zeitlupe.</p>
+
+  <div class="studio">
+    <!-- HERZ -->
+    <div class="panel">
+      <div class="badge">
+        <span class="phase" id="phaseName">Füllungsphase</span>
+        <span class="meta" id="cycT">0 ms</span>
+        <span class="s" id="s1" title="1. Herzton (S1) – Schluss der AV-Klappen (Mitral- &amp; Trikuspidalklappe) zu Beginn der Systole">S1</span><span class="s" id="s2" title="2. Herzton (S2) – Schluss der Semilunarklappen (Aorten- &amp; Pulmonalklappe) am Ende der Systole">S2</span>
+      </div>
+      <svg id="heart" viewBox="0 0 320 340" role="img" aria-label="Schematisches Herz, animiert zum Herzzyklus">
+        <g id="vessels"></g>
+        <g id="guides" aria-hidden="true"></g>
+        <g id="chambers"></g>
+        <g id="septum"></g>
+        <g id="valves"></g>
+        <g id="flows"></g>
+        <g id="hlabels"></g>
+      </svg>
+      <div class="legend" aria-hidden="true">
+        <span class="chip"><b style="background:var(--blue)"></b>desoxygeniert (rechts)</span>
+        <span class="chip"><b style="background:var(--red)"></b>oxygeniert (links)</span>
+      </div>
+    </div>
+
+    <!-- EKG -->
+    <div class="panel" id="ekgPanel">
+      <div class="badge">
+        <span class="meta">EKG · Ableitung II</span>
+        <span class="meta" id="qtcMini" style="color:var(--qt)"></span>
+      </div>
+      <svg id="ekg" viewBox="0 0 1000 470" role="img" aria-label="EKG mit QT-Messung und now-Linie">
+        <defs><clipPath id="plot"><rect id="plotRect" x="58" y="26" width="916" height="374"/></clipPath></defs>
+        <g id="grid"></g><g id="axis"></g>
+        <g clip-path="url(#plot)">
+          <g id="helpers"></g><path id="trace" class="trace"></path><path id="traceNext" class="trace trace-ghost"></path><g id="points"></g><g id="nowg"></g>
+        </g>
+        <g id="labels"></g><g id="bracket"></g>
+        <rect id="scrub" x="58" y="26" width="916" height="374"></rect>
+      </svg>
+      <div class="hint">Zeiger über das EKG bewegen = manuell scrubben · ▶ startet die Endlosschleife</div>
+    </div>
+  </div>
+
+  <div class="transport">
+    <button class="play" id="play"><span class="ico" id="playIco">▶</span><span id="playTxt">Abspielen</span></button>
+    <div class="slow">
+      <label for="slowS">Zeitlupe</label>
+      <input id="slowS" type="range" min="1" max="40" step="1" value="6" aria-label="Zeitlupenfaktor">
+      <span class="val" id="slowVal">6× langsamer</span>
+    </div>
+    <button class="play danger" id="tdp"><span class="ico">⚡</span><span id="tdpTxt">Torsade auslösen</span></button>
+    <button class="play ghost" id="pause"><span class="ico">⏱</span><span id="pauseTxt">Pause davor</span></button>
+    <button class="play ghost" id="cmtBtn"><span class="ico">❯</span><span id="cmtTxt">Kommentar</span></button>
+    <div class="hint">1× = Echtzeit (ein Schlag dauert RR ms). Höher = langsamer zum Studieren.</div>
+    <div class="tdpnote" id="tdpNote"></div>
+  </div>
+
+  <section class="commentary" id="comment" hidden aria-live="polite">
+    <div class="ck" id="cHead">Füllungsphase</div>
+    <p class="cb" id="cBody"></p>
+    <p class="cx" id="cCtx"></p>
+  </section>
+
+  <details id="paramBox">
+    <summary>Parameter & Messwerte</summary>
+    <div class="grid2">
+      <div>
+        <div class="ctl" id="qtCtl">
+          <div class="sh"><span class="name">QT-Verlängerung</span><span class="v" id="qtPos">gesund</span></div>
+          <input id="qtS" type="range" min="0" max="100" value="0" step="1" aria-label="QT-Verlängerung">
+          <div class="rl"><span>gesund</span><span>krankhaft</span></div>
+        </div>
+        <div class="ctl" id="hfCtl">
+          <div class="sh"><span class="name">Herzfrequenz</span><span class="v" id="hfPos">75 / min</span></div>
+          <input id="hfS" type="range" min="40" max="150" value="75" step="1" aria-label="Herzfrequenz">
+          <div class="rl"><span>40 · RR 1500 ms</span><span>150 · RR 400 ms</span></div>
+        </div>
+        <div class="ctl" id="thrCtl">
+          <div class="sh"><span class="name">Threshold-Wert</span><span class="v" id="thrPos">10 %</span></div>
+          <input id="thrS" type="range" min="1" max="40" value="10" step="1" aria-label="Threshold-Prozentwert">
+          <div class="rl"><span>1 % · spätes T-Ende</span><span>40 % · frühes T-Ende</span></div>
+        </div>
+        <div class="ctl" id="kCtl">
+          <div class="sh"><span class="name">Kalium (Serum)</span><span class="v" id="kPos">4,2 mmol/l</span></div>
+          <input id="kS" type="range" min="25" max="55" value="42" step="1" aria-label="Serum-Kalium">
+          <div class="rl"><span>2,5 · schwere Hypokaliämie</span><span>5,5</span></div>
+        </div>
+        <div class="ctl" id="mgCtl">
+          <div class="sh"><span class="name">Magnesium (Serum)</span><span class="v" id="mgPos">0,90 mmol/l</span></div>
+          <input id="mgS" type="range" min="40" max="120" value="90" step="1" aria-label="Serum-Magnesium">
+          <div class="rl"><span>0,40 · Hypomagnesiämie</span><span>1,20</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="verdict"><span class="big" id="qtcVal">407</span><span class="u">ms · QTc (Bazett)</span></div>
+        <span class="tag" id="tag">Normal</span>
+        <div class="risk">
+          <div class="riskhead"><span>TdP-Suszeptibilität</span><b id="riskVal">14 %</b></div>
+          <div class="riskbar"><span id="riskFill"></span></div>
+          <div class="riskparts" id="riskParts"></div>
+        </div>
+        <table class="read">
+          <tr><td>QT-Intervall</td><td id="qt">364 ms</td></tr>
+          <tr><td>QT · wahr (ohne U-Fusion)</td><td id="qtTrue">364 ms</td></tr>
+          <tr><td>QTc · Fridericia</td><td id="qtcf">392 ms</td></tr>
+          <tr><td>RR-Intervall</td><td id="rr">800 ms</td></tr>
+          <tr><td>T-Ende · Tangente</td><td id="tet">560 ms</td></tr>
+          <tr><td>T-Ende · Threshold <span id="thrLbl">(10 %)</span></td><td id="teh">567 ms</td></tr>
+          <tr><td>Differenz (Thr − Tan)</td><td id="diff">+7 ms</td></tr>
+          <tr><td>Vulnerable Phase</td><td id="vuln">78 ms</td></tr>
+          <tr><td>Diastole (Füllungszeit)</td><td id="dia">445 ms</td></tr>
+        </table>
+        <div class="warn" id="rot">T-Welle reicht in den Folgekomplex — <b>R-auf-T</b>.</div>
+        <div class="warn" id="uwarn">U-Welle verschmilzt mit der T-Welle — die automatische Messung
+          liefert faktisch <b>QU statt QT</b> (<span id="uwarnMs">+0</span> ms zu lang).</div>
+        <p class="note">Mechanische Systole ≈ QT: Semilunarklappen schließen am T-Ende (S2). Bei R-auf-T
+          überlappt die Repolarisation den nächsten Komplex — Grenzfall für automatische T-Ende-Detektion.</p>
+      </div>
+    </div>
+  </details>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const NS="http://www.w3.org/2000/svg", el=id=>document.getElementById(id);
+  const mk=(n,a={})=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+  const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  const ss=x=>{x=clamp(x,0,1);return x*x*(3-2*x);};
+
+  /* ===================== EKG ===================== */
+  /* Layoutmaße sind veränderlich: eine SVG-Einheit = ein CSS-Pixel, damit der Plot
+     den real verfügbaren Platz nutzt und Schriftgrößen konstant bleiben. */
+  let L=58,R=26,TT=26,BB=70,W=1000,H=470;
+  // tTot = feste Länge für Analyse (analyze) und den TdP-Sequenz-Ablauf.
+  // winT = tatsächlich dargestellte Zeitspanne des Plots: im Sinusrhythmus genau
+  // EIN Herzzyklus (RR), damit die now-Linie pro Durchlauf exakt eine P-Welle
+  // zeigt und durchläuft. Reicht die T-Welle in den Folgekomplex (R-auf-T, siehe
+  // rOnT), verdoppelt sich winT auf 2·RR, damit der Overlap sichtbar wird — die
+  // SVG-Breite (W) bleibt dabei fest, nur die Zeit-pro-Pixel-Skala komprimiert
+  // sich für diesen Fall. Im TdP-Modus = tTot, weil die Torsade-Sequenz über
+  // mehrere Zyklen läuft.
+  const vMin=-0.40,vMax=1.30,tTot=1000;
+  let winT=tTot, rOnT=false;
+  const X=t=>L+(t/winT)*(W-L-R), Y=v=>TT+(vMax-v)/(vMax-vMin)*(H-TT-BB);
+  const gauss=(t,mu,a,s)=>a*Math.exp(-((t-mu)**2)/(2*s*s));
+  const twave=(t,mu,a,sL,sR)=>{const s=t<mu?sL:sR;return a*Math.exp(-((t-mu)**2)/(2*s*s));};
+  const QT_START=196;
+  const tParams=p=>({muT:460+150*p,ampT:0.32*(1-0.12*p),sigL:60*(1+0.85*p),sigR:50*(1+0.85*p)});
+  const single=(t,P)=>gauss(t,90,0.12,18)+gauss(t,205,-0.06,7)+gauss(t,228,1.15,9)
+                     +gauss(t,250,-0.20,9)+twave(t,P.muT,P.ampT,P.sigL,P.sigR)
+                     +(P.ampST?gauss(t,335,P.ampST,58):0)      // ST-Senkung bei Hypokaliämie
+                     +(P.ampU ?gauss(t,P.muU,P.ampU,P.sigU):0); // U-Welle bei Hypokaliämie
+  const rhythm=(t,P,RR)=>{let v=0;for(let k=(state.pause?0:-1);k<=3;k++)v+=single(t-k*RR,P);return v;};
+
+  function drawGrid(){
+    const g=el("grid"),ax=el("axis");
+    g.replaceChildren();ax.replaceChildren();
+    const stepT=(W-L-R)<420?80:40;                 // auf schmalen Displays gröberes Raster
+    for(let t=0;t<=winT;t+=stepT){const mj=t%200===0;
+      g.appendChild(mk("line",{x1:X(t),y1:TT,x2:X(t),y2:H-BB,stroke:"var(--grid)","stroke-width":mj?1:0.6,"stroke-opacity":mj?0.20:0.09}));
+      if(mj)ax.appendChild(mk("text",{x:X(t),y:H-BB+18,"text-anchor":"middle",class:"axis-txt"})).textContent=t;}
+    for(let v=vMin;v<=vMax+1e-6;v+=0.1){const mj=Math.abs(v*10%5)<1e-3;
+      g.appendChild(mk("line",{x1:L,y1:Y(v),x2:W-R,y2:Y(v),stroke:"var(--grid)","stroke-width":mj?1:0.6,"stroke-opacity":mj?0.16:0.07}));}
+    ax.appendChild(mk("text",{x:(L+W-R)/2,y:H-BB+40,"text-anchor":"middle",class:"axis-txt"})).textContent="Zeit [ms]";
+    ax.appendChild(mk("line",{x1:L,y1:Y(0),x2:W-R,y2:Y(0),stroke:"var(--muted)","stroke-width":1,"stroke-dasharray":"1 4","stroke-opacity":0.5}));
+  }
+
+  function analyze(P,thr){
+    const N=tTot,T=[],V=[];for(let i=0;i<=N;i++){T.push(i);V.push(single(i,P));}
+    let iPk=-1,vPk=-1e9;for(let i=0;i<=N;i++)if(T[i]>=300&&T[i]<=880&&V[i]>vPk){vPk=V[i];iPk=i;}
+    let iSt=iPk,mMin=0;for(let i=iPk+2;i<N-1&&T[i]<=900;i++){const s=(V[i+1]-V[i-1])/2;if(s<mMin){mMin=s;iSt=i;}}
+    const t0=T[iSt],v0=V[iSt],m=mMin,tEndTan=t0-v0/m,lvl=thr*vPk;let tThr=T[N];
+    for(let i=iPk;i<N;i++)if(V[i]>=lvl&&lvl>=V[i+1]){const f=(V[i]-lvl)/(V[i]-V[i+1]);tThr=T[i]+f;break;}
+    return {tPk:iPk,vPk,tInfl:t0,vInfl:v0,slope:m,tEndTan,tThr,lvl};
+  }
+
+  // Inverts the qtS severity slider (0-1) to reproduce a literal, real
+  // (tangent-method) QT interval in ms at a given RR — used by applyQuery()
+  // below so a link built from a real measurement's QT value shows a
+  // matching animation instead of just clamping to the slider's 0-100
+  // range. tEndTan grows monotonically with p (later/wider T-wave), so a
+  // plain bisection converges; threshold % doesn't affect the tangent
+  // method at all, so any placeholder value works here.
+  function solvePForQT(targetQT,RR){
+    let lo=0,hi=1;
+    for(let i=0;i<40;i++){
+      const mid=(lo+hi)/2;
+      const A=analyze(tParams(mid),0.1);
+      const qt=A.tEndTan-QT_START;
+      if(qt<targetQT) lo=mid; else hi=mid;
+    }
+    return (lo+hi)/2;
+  }
+  const zone=q=> q<430?{c:"var(--ok)",t:"Normal"}:q<450?{c:"var(--ok)",t:"Hoch-normal"}
+    :q<470?{c:"var(--warn)",t:"Grenzwertig verlängert"}:q<500?{c:"var(--hot)",t:"Verlängert"}
+    :{c:"var(--crit)",t:"Deutlich verlängert · TdP-Risiko"};
+
+  const trace=el("trace"),traceNext=el("traceNext"),helpers=el("helpers"),points=el("points"),labels=el("labels"),bracket=el("bracket");
+
+  /* Cache je Parametersatz */
+  let P,RR,A,EV,TDP={tOn:460,tTerm:400},MOD={},RISK={total:0,sustained:false};
+  function recompute(){
+    const pSl=el("qtS").value/100, hf=+el("hfS").value, thr=el("thrS").value/100;
+    const K=+el("kS").value/10, Mg=+el("mgS").value/100;
+    // Modulatoren, jeweils 0 (unauffällig) .. 1 (maximal ungünstig)
+    MOD.hypoK =clamp((4.2-K)/1.7,0,1);
+    MOD.hypoMg=clamp((0.85-Mg)/0.45,0,1);
+    MOD.brady =clamp((70-hf)/30,0,1);
+    MOD.pause =state.pause?1:0;
+    MOD.K=K; MOD.Mg=Mg;
+    // Hypokaliämie verlängert QT zusätzlich; Pause via Reverse Use-Dependence
+    const p=clamp(pSl+0.45*MOD.hypoK+0.12*MOD.pause,0,1);
+    P=tParams(p);
+    P.ampT*=(1-0.45*MOD.hypoK);                 // T flacht ab
+    P.ampST=-0.05*MOD.hypoK;                    // ST-Senkung
+    P.ampU =0.115*MOD.hypoK;                    // U-Welle tritt hervor
+    P.muU  =P.muT+1.45*P.sigR; P.sigU=0.55*P.sigR;
+    RR=60000/hf; A=analyze(P,thr);
+    // Wahres Repolarisationsende, analytisch (= Tangentenmethode ohne U-Wellen-Fusion).
+    // Physiologie hängt hieran, die Messwerte dürfen sich von der U-Welle täuschen lassen.
+    const tEndTrue=P.muT+2.0*P.sigR;
+    MOD.tEndTrue=tEndTrue; MOD.quBias=A.tEndTan-tEndTrue;
+    const t_as0=60, t_avc=205, t_slo=250;
+    let t_slc=clamp(tEndTrue, t_slo+40, RR-30);
+    let t_avo=Math.min(RR-15, t_slc+70);
+    if(t_avo<=t_slc) t_avo=t_slc+8;
+    EV={t_as0,t_avc,t_slo,t_slc,t_avo};
+    // Dispersion der Repolarisation: Hypokaliämie verbreitert das vulnerable Fenster
+    MOD.disp=1+0.9*MOD.hypoK+0.25*MOD.brady;
+    const qb=(tEndTrue-QT_START)/Math.sqrt(RR/1000);
+    const qfr=(tEndTrue-QT_START)/Math.cbrt(RR/1000);   // Risiko über Fridericia: frequenzrobuster
+    RISK.qtc=clamp((qfr-400)/140,0,1);
+    RISK.total=clamp(0.36*RISK.qtc+0.24*MOD.hypoK+0.16*MOD.hypoMg
+                    +0.12*MOD.brady+0.12*MOD.pause,0,1);
+    RISK.sustained=RISK.total>=0.50;            // sonst selbstlimitierende Salve
+    RISK.qb=qb;
+    TDP={tOn:P.muT, tTerm:140+420*RISK.total};  // Extrareiz auf den wahren T-Gipfel
+    // Sinus: Fenster = genau ein Herzzyklus (RR) → eine P-Welle pro Durchlauf —
+    // außer die T-Welle reicht in den Folgekomplex (R-auf-T): dann 2·RR, damit
+    // der Overlap sichtbar wird (siehe drawECGStatic). TdP: volle tTot-Spanne
+    // für die mehrzyklische Torsade-Sequenz.
+    rOnT = !state.tdp && A.tEndTan>=196+RR-10;
+    winT = state.tdp ? tTot : (rOnT ? 2*RR : RR);
+    state.now = ((state.now % winT) + winT) % winT; // in neues Fenster falten
+    drawGrid();
+    drawECGStatic(pSl,hf,thr);
+    buildVentKeys();
+    refreshCtx();
+  }
+
+  /* Torsade de Pointes: normaler Rhythmus bis zum Extrareiz auf der T-Welle,
+     danach undulierende Kammertachykardie mit wechselnder Amplitude ("Spitzenumkehr"). */
+  function tdpV(t){
+    if(t<TDP.tOn) return rhythm(t,P,RR);
+    const u=t-TDP.tOn;
+    const spike=gauss(u,12,0.95,6)+gauss(u,30,-0.28,9);   // R-auf-T-Extrasystole
+    const f=5.0/1000, Tw=520;                             // ~300/min; Twist gerafft, s. Hinweis
+    const env=0.38*(0.25+0.75*Math.abs(Math.sin(Math.PI*u/Tw)));
+    const osc=spike + ss(u/70)*env*Math.sin(2*Math.PI*f*u);
+    if(RISK.sustained) return osc;                        // anhaltend: entartet
+    const tT=TDP.tTerm;                                   // sonst: Salve bricht ab
+    if(u<tT) return osc*(1-ss((u-tT+130)/130));
+    return rhythm(t-(TDP.tOn+tT+70),P,RR)*ss((u-tT)/90);
+  }
+  const sigAt=t=>state.tdp?tdpV(t):rhythm(t,P,RR);
+
+  function drawECGStatic(p,hf,thr){
+    // Bei R-auf-T zeigt winT=2·RR den Folgekomplex mit; er wird als eigener,
+    // abgedunkelter Pfad ab t=RR gezeichnet, damit klar bleibt: das ist der
+    // NÄCHSTE Schlag, nicht Teil der vermessenen Kurve.
+    const tEnd1=rOnT?RR:winT;
+    let d="M "+X(0).toFixed(1)+" "+Y(sigAt(0)).toFixed(1);
+    for(let t=2;t<=tEnd1;t+=2) d+=" L "+X(t).toFixed(1)+" "+Y(sigAt(t)).toFixed(1);
+    trace.setAttribute("d",d);
+    if(rOnT){
+      let d2="M "+X(RR).toFixed(1)+" "+Y(sigAt(RR)).toFixed(1);
+      for(let t=RR+2;t<=winT;t+=2) d2+=" L "+X(t).toFixed(1)+" "+Y(sigAt(t)).toFixed(1);
+      traceNext.setAttribute("d",d2);
+      traceNext.style.display="";
+    } else {
+      traceNext.style.display="none";
+    }
+    // Wellenlabels jedes Mal neu setzen: da winT (und damit die X-Abbildung)
+    // sich mit der Herzfrequenz ändert, würden einmalig gecachte Labels sonst
+    // an falscher Stelle stehen bleiben.
+    labels.replaceChildren();
+    const put=(t,v,x)=>labels.appendChild(mk("text",{x:X(t),y:Y(v),"text-anchor":"middle",class:"wave-lbl"})).textContent=x;
+    put(90,0.20,"P");put(206,-0.17,"Q");put(228,1.22,"R");
+    helpers.replaceChildren();points.replaceChildren();bracket.replaceChildren();
+
+    // Vulnerable Phase (relative Refraktärzeit): hier ist ein Teil der Zellen wieder
+    // erregbar, ein Teil noch nicht — ein Extrareiz kann kreisen statt zu verlöschen.
+    const vA=P.muT-P.sigL*0.95*MOD.disp, vB=P.muT+P.sigR*0.35*MOD.disp;
+    helpers.appendChild(mk("rect",{class:"h-line",x:X(vA),y:TT,width:Math.max(1,X(vB)-X(vA)),
+      height:H-BB-TT,fill:"var(--crit)","fill-opacity":0.14}));
+    helpers.appendChild(mk("text",{class:"vuln-lbl",x:(X(vA)+X(vB))/2,y:TT+13,"text-anchor":"middle"})).textContent="vulnerabel";
+    el("vuln").textContent=Math.round(vB-vA)+" ms";
+
+    // R-auf-T: Fenster zeigt 2 Komplexe (siehe winT-Berechnung) — Trennlinie
+    // markiert, wo der abgedunkelte Folgekomplex beginnt.
+    if(rOnT){
+      helpers.appendChild(mk("line",{class:"rot-mark",x1:X(RR),y1:TT,x2:X(RR),y2:H-BB}));
+      helpers.appendChild(mk("text",{class:"rot-lbl",x:X(RR)+6,y:H-BB-8,"text-anchor":"start"}))
+        .textContent="Folgekomplex ▶";
+    }
+
+    // U-Welle sichtbar machen, sobald Hypokaliämie sie hervortreten lässt
+    if(P.ampU>0.03)
+      labels.appendChild(mk("text",{id:"uLbl",class:"wave-lbl","text-anchor":"middle",
+        x:X(P.muU),y:Y(P.ampU+0.10)})).textContent="U";
+    if(state.pause)
+      helpers.appendChild(mk("text",{class:"vuln-lbl",x:L+6,y:TT+13,"text-anchor":"start",
+        fill:"var(--hf)"})).textContent="◀ Pause (Short–Long–Short)";
+
+    if(state.tdp){
+      helpers.appendChild(mk("line",{x1:X(TDP.tOn),y1:TT,x2:X(TDP.tOn),y2:H-BB,stroke:"var(--crit)","stroke-width":2}));
+      helpers.appendChild(mk("text",{class:"vuln-lbl",x:X(TDP.tOn)+7,y:TT+31,"text-anchor":"start"})).textContent="R auf T";
+    }
+
+    if(!state.tdp){
+    labels.appendChild(mk("text",{id:"tLbl",class:"wave-lbl","text-anchor":"middle",x:X(P.muT),y:Y(A.vPk+0.14)})).textContent="T";
+    helpers.appendChild(mk("line",{class:"h-line",x1:X(QT_START),y1:TT,x2:X(QT_START),y2:H-BB,stroke:"var(--start)","stroke-width":1.4,"stroke-dasharray":"5 5","stroke-opacity":0.85}));
+    helpers.appendChild(mk("line",{class:"h-line",x1:X(A.tInfl-10),y1:Y(A.lvl),x2:X(A.tThr+18),y2:Y(A.lvl),stroke:"var(--thr)","stroke-width":1.3,"stroke-dasharray":"2 4","stroke-opacity":0.9}));
+    helpers.appendChild(mk("line",{class:"h-line",x1:X(A.tThr),y1:Y(0)+10,x2:X(A.tThr),y2:Y(A.lvl),stroke:"var(--thr)","stroke-width":1.8}));
+    points.appendChild(mk("circle",{class:"h-line",cx:X(A.tThr),cy:Y(A.lvl),r:3.2,fill:"var(--thr)"}));
+    const m=A.slope,t0=A.tInfl,v0=A.vInfl,vTop=Math.min(vMax-0.04,0.62*A.vPk),tTop=t0+(vTop-v0)/m;
+    helpers.appendChild(mk("line",{class:"h-line",x1:X(tTop),y1:Y(vTop),x2:X(A.tEndTan),y2:Y(0),stroke:"var(--tan)","stroke-width":2}));
+    points.appendChild(mk("circle",{class:"h-line",cx:X(t0),cy:Y(v0),r:3.4,fill:"none",stroke:"var(--tan)","stroke-width":2}));
+    helpers.appendChild(mk("line",{class:"h-line",x1:X(A.tEndTan),y1:Y(0)+10,x2:X(A.tEndTan),y2:TT+8,stroke:"var(--tan)","stroke-width":1.6,"stroke-dasharray":"4 4","stroke-opacity":0.8}));
+    for(const t of [QT_START,A.tEndTan])
+      helpers.appendChild(mk("line",{class:"h-line",x1:X(t),y1:TT,x2:X(t),y2:H-BB,stroke:"var(--qt)","stroke-width":1,"stroke-opacity":0.28}));
+    const yb=H-BB+52,x1=X(QT_START),x2=X(A.tEndTan),put=a=>bracket.appendChild(mk("line",Object.assign({class:"h-line",stroke:"var(--qt)","stroke-width":1.8},a)));
+    put({x1,y1:yb,x2,y2:yb});put({x1,y1:yb-6,x2:x1,y2:yb+6});put({x1:x2,y1:yb-6,x2:x2,y2:yb+6});
+    const qtms=Math.round(A.tEndTan-QT_START),lbl=mk("text",{class:"h-line",x:(x1+x2)/2,y:yb-9,"text-anchor":"middle",fill:"var(--qt)","font-family":"ui-monospace,monospace","font-size":13,"font-weight":700});
+    lbl.textContent="QT "+qtms+" ms";bracket.appendChild(lbl);
+    }
+
+    // Mechanische Systole (S1→S2) frisst die Diastole auf — je länger QT, desto weniger Füllung
+    const diaD=RR-(EV.t_slc-EV.t_avc);
+    el("dia").textContent=Math.round(diaD)+" ms";
+    el("dia").style.color=diaD<180?"var(--crit)":diaD<280?"var(--hot)":"var(--text)";
+
+    const QT=A.tEndTan-QT_START,qb=QT/Math.sqrt(RR/1000),qf=QT/Math.cbrt(RR/1000),z=zone(qb);
+    el("qtcVal").textContent=Math.round(qb);el("qtcVal").style.color=z.c;
+    el("tag").textContent=z.t;el("tag").style.color=z.c;
+    el("qtcMini").textContent="QTc "+Math.round(qb)+" ms";el("qtcMini").style.color=z.c;
+    el("qt").textContent=Math.round(QT)+" ms";el("qtcf").textContent=Math.round(qf)+" ms";
+    el("rr").textContent=Math.round(RR)+" ms";el("tet").textContent=Math.round(A.tEndTan)+" ms";
+    el("teh").textContent=Math.round(A.tThr)+" ms";
+    const df=A.tThr-A.tEndTan;el("diff").textContent=(df>=0?"+":"")+Math.round(df)+" ms";
+    el("qtPos").textContent=p<0.02?"gesund":"+"+Math.round(p*100)+" %";
+    el("hfPos").textContent=hf+" / min";el("thrPos").textContent=Math.round(thr*100)+" %";
+    el("thrLbl").textContent="("+Math.round(thr*100)+" %)";
+    el("rot").classList.toggle("on",A.tEndTan>=196+RR-10);
+    el("uwarn").classList.toggle("on",MOD.quBias>20);
+    el("uwarnMs").textContent="+"+Math.round(MOD.quBias);
+    el("qtTrue").textContent=Math.round(MOD.tEndTrue-QT_START)+" ms";
+    el("qtTrue").style.color=MOD.quBias>20?"var(--ok)":"var(--text)";
+
+    // Elektrolyt-Anzeigen
+    const kTxt=MOD.K.toFixed(1).replace(".",","), mgTxt=MOD.Mg.toFixed(2).replace(".",",");
+    el("kPos").textContent=kTxt+" mmol/l";
+    el("kPos").style.color=MOD.K<3.0?"var(--crit)":MOD.K<3.5?"var(--hot)":"var(--text)";
+    el("mgPos").textContent=mgTxt+" mmol/l";
+    el("mgPos").style.color=MOD.Mg<0.6?"var(--crit)":MOD.Mg<0.75?"var(--hot)":"var(--text)";
+
+    // Risiko-Meter
+    const R100=Math.round(RISK.total*100);
+    const rc=RISK.total<0.25?"var(--ok)":RISK.total<0.5?"var(--warn)":RISK.total<0.7?"var(--hot)":"var(--crit)";
+    el("riskVal").textContent=R100+" %";el("riskVal").style.color=rc;
+    el("riskFill").style.width=R100+"%";el("riskFill").style.background=rc;
+    const parts=[["QTc",RISK.qtc],["K⁺",MOD.hypoK],["Mg²⁺",MOD.hypoMg],
+                 ["Bradykardie",MOD.brady],["Pause",MOD.pause]];
+    el("riskParts").replaceChildren();
+    for(const [k,v] of parts){
+      const s=document.createElement("span");
+      s.className="rp"+(v>0.15?" on":"");
+      s.textContent=k+" "+Math.round(v*100)+" %";
+      if(v>0.15) s.style.background=v>0.66?"var(--crit)":v>0.33?"var(--hot)":"var(--warn)";
+      el("riskParts").appendChild(s);
+    }
+
+    el("tdpNote").textContent = state.tdp
+      ? (RISK.sustained
+          ? "Anhaltende Torsade — die Salve findet bei dieser Konstellation keinen Ausweg mehr."
+          : "Selbstlimitierende Salve — derselbe Extrareiz terminiert nach ~"+Math.round(TDP.tTerm)+" ms von allein.")
+      : "Suszeptibilität "+R100+" % — ab 50 % entartet derselbe Extrareiz zur anhaltenden Torsade.";
+  }
+
+  /* ===================== HERZ ===================== */
+  const vesselsG=el("vessels"),guidesG=el("guides"),chambersG=el("chambers"),
+        septumG=el("septum"),valvesG=el("valves"),flowsG=el("flows"),hlabelsG=el("hlabels");
+  const CH={ra:{cx:108,cy:150,rx:40,ry:32,fill:"var(--blue)"},
+            rv:{cx:105,cy:246,rx:50,ry:62,fill:"var(--blue)"},
+            la:{cx:210,cy:150,rx:38,ry:30,fill:"var(--red)"},
+            lv:{cx:216,cy:250,rx:46,ry:70,fill:"var(--red)"}};
+  const tube=(d,c,w)=>vesselsG.appendChild(mk("path",{d,fill:"none",stroke:c,"stroke-width":w||16,"stroke-linecap":"round","stroke-opacity":0.85}));
+  // Medizinische Fachbegriffe für die Tooltips der Herz-Strukturen (SVG <title>).
+  const HEART_TERMS={
+    ra:"Rechter Vorhof (Atrium dextrum)",
+    rv:"Rechte Herzkammer (Ventriculus dexter)",
+    la:"Linker Vorhof (Atrium sinistrum)",
+    lv:"Linke Herzkammer (Ventriculus sinister)",
+    vTri:"Trikuspidalklappe (Valva tricuspidalis) – rechte AV-Klappe",
+    vMit:"Mitralklappe (Valva mitralis / Bikuspidalklappe) – linke AV-Klappe",
+    vPul:"Pulmonalklappe (Valva trunci pulmonalis) – Semilunarklappe",
+    vAor:"Aortenklappe (Valva aortae) – Semilunarklappe",
+    vcs:"Obere Hohlvene (Vena cava superior)",
+    vci:"Untere Hohlvene (Vena cava inferior)"
+  };
+  const addTitle=(parent,text)=>{const t=mk("title");t.textContent=text;parent.appendChild(t);return t;};
+  let FLOW;
+  (function buildHeart(){
+    tube("M95,34 L102,120",  "var(--blue)");            // VCS
+    tube("M64,330 L100,185", "var(--blue)");            // VCI
+    tube("M292,120 L250,150","var(--red)",14);          // Pulmonalvenen o
+    tube("M292,178 L250,158","var(--red)",14);          // Pulmonalvenen u
+    tube("M86,198 C64,150 57,108 55,58","var(--blue)"); // Truncus pulmonalis
+    tube("M185,150 C185,90 185,60 190,50 C210,34 246,44 254,78 L256,150","var(--red)"); // Aortenbogen
+    for(const k in CH){const c=CH[k];
+      const g=mk("g",{id:k,class:"chamber"});
+      addTitle(g,HEART_TERMS[k]);
+      g.appendChild(mk("ellipse",{cx:c.cx,cy:c.cy,rx:c.rx,ry:c.ry,fill:c.fill,"fill-opacity":0.95,stroke:"var(--wall)","stroke-width":k==="lv"?3:2}));
+      chambersG.appendChild(g);}
+    septumG.appendChild(mk("line",{x1:160,y1:122,x2:162,y2:315,stroke:"#20304c","stroke-width":6,"stroke-linecap":"round"}));
+    // Klappen-Container (jeweils mit persistentem <title>-Tooltip)
+    for(const id of ["vTri","vMit","vPul","vAor"]){
+      const g=mk("g",{id});
+      addTitle(g,HEART_TERMS[id]);
+      valvesG.appendChild(g);
+    }
+    // Fluss-Guides (unsichtbar) + Partikel
+    const G=[
+      {id:"svc",d:"M95,34 L103,150",col:"var(--blueS)",side:"ven"},
+      {id:"ivc",d:"M64,330 L104,152",col:"var(--blueS)",side:"ven"},
+      {id:"pv", d:"M292,150 L212,150",col:"var(--redS)",side:"venL"},
+      {id:"tri",d:"M108,172 L106,232",col:"var(--blueS)",side:"av"},
+      {id:"mit",d:"M212,170 L215,238",col:"var(--redS)",side:"av"},
+      {id:"pul",d:"M92,230 L78,190 L66,152 C60,120 57,92 55,60",col:"var(--blueS)",side:"ejR"},
+      {id:"aor",d:"M205,235 L188,170 C185,120 185,80 190,52 C210,36 246,46 254,80 L256,140",col:"var(--redS)",side:"ejL"}
+    ];
+    FLOW=G.map(g=>{
+      const path=mk("path",{d:g.d,fill:"none",stroke:"none"});guidesG.appendChild(path);
+      const len=path.getTotalLength();const N=Math.max(3,Math.round(len/34));
+      const grp=mk("g",{});flowsG.appendChild(grp);
+      const parts=[];for(let i=0;i<N;i++){const c=mk("circle",{r:3,fill:g.col,opacity:0});grp.appendChild(c);parts.push({c,off:i/N});}
+      return {...g,path,len,parts};
+    });
+    // Labels
+    const t=(x,y,s,cls,title)=>{
+      const e=mk("text",{x,y,"text-anchor":"middle",class:cls});
+      e.textContent=s;
+      if(title){addTitle(e,title);e.style.cursor="help";}
+      hlabelsG.appendChild(e);
+    };
+    t(108,153,"RA","vlbl",HEART_TERMS.ra);t(105,251,"RV","vlbl",HEART_TERMS.rv);
+    t(210,153,"LA","vlbl r",HEART_TERMS.la);t(216,256,"LV","vlbl r",HEART_TERMS.lv);
+    t(95,28,"VCS","tag-lbl",HEART_TERMS.vcs);t(60,335,"VCI","tag-lbl",HEART_TERMS.vci);t(60,50,"Truncus pulm.","tag-lbl");
+    t(258,42,"Aorta","tag-lbl r");t(300,110,"Pulmonalvenen","tag-lbl r");
+  })();
+
+  function drawValve(id,cx,cy,w,dir,o,Lf){
+    const g=el(id);
+    // Alles außer dem <title>-Tooltip entfernen, damit dieser über alle
+    // Animationsframes hinweg erhalten bleibt (statt via replaceChildren()
+    // jedes Frame gelöscht zu werden).
+    [...g.childNodes].forEach(n=>{ if(n.nodeName!=="title") g.removeChild(n); });
+    // Unsichtbare, großzügige Trefferfläche, damit der Tooltip bequem über der
+    // (dünnen) Klappe erscheint, nicht nur exakt auf den Linien.
+    g.appendChild(mk("rect",{x:cx-w-4,y:cy-Lf-4,width:2*w+8,height:2*Lf+8,fill:"transparent","pointer-events":"all"}));
+    const p1=[cx-w,cy],p2=[cx+w,cy],ct=[cx,cy+dir*10],o1=[cx-w+6,cy+dir*Lf],o2=[cx+w-6,cy+dir*Lf];
+    const t1=[ct[0]+(o1[0]-ct[0])*o,ct[1]+(o1[1]-ct[1])*o],t2=[ct[0]+(o2[0]-ct[0])*o,ct[1]+(o2[1]-ct[1])*o];
+    const line=(a,b)=>g.appendChild(mk("line",{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:"#e8eefc","stroke-width":3,"stroke-linecap":"round"}));
+    line(p1,t1);line(p2,t2);
+  }
+
+  // Ventrikel-/Vorhof-Füllung als Keyframes (je Parametersatz neu)
+  let VKEYS,AKEYS;
+  function buildVentKeys(){
+    const {t_as0,t_avc,t_slo,t_slc,t_avo}=EV;
+    const fillEnd=Math.min(RR-1,t_avo+120);
+    VKEYS=sortk([[0,0.88],[t_as0,0.90],[t_avc,1.00],[t_slo,1.00],[t_slc,0.35],[t_avo,0.35],[fillEnd,0.80],[RR,0.88]]);
+    // Vorhofvolumen: Minimum am Ende der Vorhofsystole (t_avc), dann Reservoir-
+    // Füllung aus den Venen während der Ventrikelsystole bei GESCHLOSSENER
+    // AV-Klappe → Maximum (v-Welle) exakt bei AV-Klappen-Öffnung (t_avo).
+    // Erst danach entleert sich der Vorhof während der schnellen Ventrikel-
+    // füllung (Conduit-Phase, t_avo→fillEnd). Danach langsame Diastase.
+    AKEYS=sortk([[0,0.78],[t_as0,0.86],[t_avc,0.45],[t_slc,0.85],[t_avo,0.90],[fillEnd,0.55],[RR,0.78]]);
+  }
+  function sortk(k){k=k.filter(a=>a[0]>=0&&a[0]<=RR).sort((a,b)=>a[0]-b[0]);
+    const out=[];for(const p of k){if(out.length&&p[0]<=out[out.length-1][0])p[0]=out[out.length-1][0]+1;out.push(p);}return out;}
+  function kf(keys,x){if(x<=keys[0][0])return keys[0][1];
+    for(let i=1;i<keys.length;i++)if(x<=keys[i][0]){const[a,va]=keys[i-1],[b,vb]=keys[i];return va+(vb-va)*ss((x-a)/(b-a));}
+    return keys[keys.length-1][1];}
+  const band=(x,a,b,e)=>Math.min(ss((x-a)/e),ss((b-x)/e)); // ~1 in [a+e,b-e], sonst 0
+
+  function scaleChamber(id,s){const c=CH[id];el(id).setAttribute("transform",`translate(${c.cx},${c.cy}) scale(${s}) translate(${-c.cx},${-c.cy})`);}
+
+  function updateHeart(phase){
+    const {t_as0,t_avc,t_slo,t_slc,t_avo}=EV;
+    const avClosed=band(phase,t_avc,t_avo,18), avO=clamp(1-avClosed,0,1);
+    const slO=clamp(band(phase,t_slo,t_slc,14),0,1);
+    // Klappen
+    drawValve("vTri",108,186,26,+1,avO,26);
+    drawValve("vMit",212,184,24,+1,avO,26);
+    drawValve("vPul",66,150,15,-1,slO,20);
+    drawValve("vAor",185,150,17,-1,slO,20);
+    // Kammern
+    const Vf=kf(VKEYS,phase),Af=kf(AKEYS,phase);
+    // Ventrikel: kräftige Volumenexkursion, damit der systolische Auswurf
+    // (ESV bei Vf≈0.35 → ~0.74, EDV bei Vf=1 → ~1.04) deutlich sichtbar ist.
+    scaleChamber("rv",0.58+0.46*Vf);scaleChamber("lv",0.58+0.46*Vf);
+    scaleChamber("ra",0.85+0.20*Af);scaleChamber("la",0.85+0.20*Af);
+    // Flüsse
+    const kick=band(phase,t_as0,t_avc,20),rapid=band(phase,t_avo,Math.min(RR,t_avo+130),20);
+    const avFlow=clamp(avO*(0.45+0.7*(kick+rapid)),0,1), ejFlow=slO, ven=0.55;
+    const inten={svc:ven,ivc:ven,pv:ven,tri:avFlow,mit:avFlow,pul:ejFlow,aor:ejFlow};
+    for(const f of FLOW){
+      const it=inten[f.id]||0;
+      for(const pt of f.parts){
+        const frac=((flowT*(0.10+0.22*it)+pt.off)%1+1)%1;
+        const q=f.path.getPointAtLength(frac*f.len);
+        pt.c.setAttribute("cx",q.x);pt.c.setAttribute("cy",q.y);pt.c.setAttribute("opacity",it*0.95);
+      }
+    }
+    // Phasenname & Sounds
+    let name="Füllungsphase (Diastole)", key="fuell";
+    if(phase>=t_as0&&phase<t_avc){name="Vorhofsystole (Vorhofkontraktion)";key="vorhof";}
+    else if(phase>=t_avc&&phase<t_slo){name="Anspannungsphase (isovolumetrisch)";key="anspann";}
+    else if(phase>=t_slo&&phase<t_slc){name="Austreibungsphase (Ventrikelsystole)";key="austreib";}
+    else if(phase>=t_slc&&phase<t_avo){name="Entspannungsphase (isovolumetrisch)";key="entspann";}
+    el("phaseName").textContent=name;
+    setComment(key);
+    el("cycT").textContent=Math.round(phase)+" ms";
+    el("s1").classList.toggle("on",phase>=t_avc&&phase<t_avc+40);
+    el("s2").classList.toggle("on",phase>=t_slc&&phase<t_slc+40);
+  }
+
+  /* Herz während Torsade: Kammern flirren hochfrequent, aber ohne Auswurf.
+     Der venöse Zufluss läuft weiter — Blut kommt an, wird aber nicht mehr ausgeworfen. */
+  function updateHeartTdP(u){
+    const f=4.6/1000, q=Math.sin(2*Math.PI*f*u), ramp=ss(u/150);
+    const vRest=0.80+0.22*0.42, vNow=vRest+0.018*q;       // kaum Volumenänderung
+    const v0=0.80+0.22*kf(VKEYS,0);
+    scaleChamber("rv",v0+(vNow-v0)*ramp);scaleChamber("lv",v0+(vNow-v0)*ramp);
+    const aS=0.99+0.02*Math.sin(2*Math.PI*u/900);          // Vorhöfe stauen sich
+    scaleChamber("ra",aS);scaleChamber("la",aS);
+    const flut=ramp*(0.09+0.05*(0.5+0.5*q));               // Klappen flattern nur noch
+    drawValve("vTri",108,186,26,+1,flut,26);
+    drawValve("vMit",212,184,24,+1,flut,26);
+    drawValve("vPul",66,150,15,-1,flut*0.4,20);
+    drawValve("vAor",185,150,17,-1,flut*0.4,20);
+    const inten={svc:0.55,ivc:0.55,pv:0.55,tri:0.5-0.38*ramp,mit:0.5-0.38*ramp,
+                 pul:0.5-0.46*ramp,aor:0.5-0.46*ramp};
+    for(const fl of FLOW){
+      const it=clamp(inten[fl.id]||0,0,1);
+      for(const pt of fl.parts){
+        const frac=((flowT*(0.10+0.22*it)+pt.off)%1+1)%1;
+        const pq=fl.path.getPointAtLength(frac*fl.len);
+        pt.c.setAttribute("cx",pq.x);pt.c.setAttribute("cy",pq.y);pt.c.setAttribute("opacity",it*0.95);
+      }
+    }
+    el("phaseName").textContent="Torsade de Pointes — kein wirksamer Auswurf";
+    el("cycT").textContent=Math.round(u)+" ms nach R-auf-T";
+    el("s1").classList.remove("on");el("s2").classList.remove("on");
+    setComment("tdp");
+  }
+
+  /* ===================== Fachkommentar ===================== */
+  const CMT={
+    fuell:{h:"Füllungsphase — Diastole",
+      b:"Das Ventrikelmyokard befindet sich in Phase 4 des Aktionspotenzials, am stabilen Ruhemembranpotenzial; im EKG entspricht dies der TP-Strecke. Die AV-Klappen stehen offen, die Semilunarklappen sind geschlossen. Die Füllung läuft passiv entlang des atrioventrikulären Druckgradienten: Auf die frühdiastolische rasche Einstromphase folgt die Diastase mit deutlich verlangsamtem Fluss. In diese Phase fällt auch der überwiegende Teil der Koronarperfusion des linken Ventrikels."},
+    vorhof:{h:"Vorhofsystole",
+      b:"Die P-Welle markiert die vom Sinusknoten ausgehende Depolarisation beider Vorhöfe. Die nachfolgende Vorhofkontraktion liefert den atrialen Füllungsbeitrag von etwa 15–25 % des enddiastolischen Volumens; danach ist das enddiastolische Volumen erreicht. Bei Tachykardie oder Vorhofflimmern entfällt dieser Beitrag, das Schlagvolumen sinkt entsprechend."},
+    anspann:{h:"Anspannungsphase — isovolumetrische Kontraktion",
+      b:"Der QRS-Komplex bildet die ventrikuläre Depolarisation ab, elektrophysiologisch Phase 0 mit schnellem Natriumeinstrom. Alle vier Klappen sind geschlossen, der intraventrikuläre Druck steigt bei konstantem Volumen steil an. Der Schluss der AV-Klappen erzeugt den ersten Herzton."},
+    austreib:{h:"Austreibungsphase — Ventrikelsystole",
+      b:"ST-Strecke und T-Welle entsprechen der Plateauphase (Phase 2, Calciumeinstrom über L-Typ-Kanäle) und der Repolarisation (Phase 3, Kaliumausstrom über IKr und IKs). Sobald der Ventrikeldruck den Aorten- beziehungsweise Pulmonalarteriendruck übersteigt, öffnen die Semilunarklappen und das Schlagvolumen wird ausgeworfen. Die Dauer dieser Phase ist unmittelbar an das QT-Intervall gekoppelt — verlängerte Repolarisation heißt verlängerte mechanische Systole zulasten der Diastole."},
+    entspann:{h:"Entspannungsphase — isovolumetrische Relaxation",
+      b:"Mit dem Ende der Repolarisation schließen die Semilunarklappen; der Klappenschluss erzeugt den zweiten Herzton und in der Aortendruckkurve die Inzisur. Alle Klappen sind erneut geschlossen, der Druck fällt bei konstantem endsystolischem Volumen ab, bis er den Vorhofdruck unterschreitet und die AV-Klappen wieder öffnen."},
+    tdp:{h:"Torsade de Pointes — polymorphe Kammertachykardie",
+      b:"Eine Extrasystole ist in die vulnerable Phase eingefallen und hat kreisende Erregung ausgelöst. Die Kammerfrequenz liegt bei etwa 250–300/min, die QRS-Achse dreht sich undulierend um die isoelektrische Linie. Eine koordinierte Kontraktion findet nicht mehr statt: Das Schlagvolumen bricht zusammen, während der venöse Rückstrom unverändert anhält — hämodynamisch ein funktioneller Kreislaufstillstand."}
+  };
+  function ctxText(){
+    const b=[];
+    if(MOD.hypoK>0.15) b.push("Hypokaliämie ("+MOD.K.toFixed(1).replace(".",",")+" mmol/l): Bei erniedrigtem extrazellulärem Kalium sinkt paradoxerweise die IKr-Leitfähigkeit; Aktionspotenzialdauer und Repolarisation verlängern sich, die transmurale Dispersion nimmt zu, die T-Welle flacht ab und die U-Welle tritt hervor.");
+    if(MOD.hypoMg>0.15) b.push("Hypomagnesiämie ("+MOD.Mg.toFixed(2).replace(".",",")+" mmol/l): begünstigt frühe Nachdepolarisationen über den L-Typ-Calciumkanal, ohne die Repolarisationsdauer selbst zu verlängern — daher wirkt Magnesium auch bei normwertigem Serumspiegel als Therapie.");
+    if(MOD.brady>0.15) b.push("Bradykardie: Über die Reverse Use-Dependence nimmt die Aktionspotenzialdauer bei langsamer Frequenz weiter zu.");
+    if(MOD.pause) b.push("Postextrasystolische Pause: Die Short-Long-Short-Sequenz verlängert die Repolarisation des Folgeschlags zusätzlich — die typische Auslösekonstellation der pausenabhängigen Torsade.");
+    if(MOD.quBias>20) b.push("T-U-Fusion: Die automatische Tangentenmessung erfasst faktisch QU statt QT und überschätzt das Intervall um rund "+Math.round(MOD.quBias)+" ms.");
+    return b.join(" ");
+  }
+  let cmtKey="";
+  function setComment(k){
+    if(k===cmtKey||el("comment").hidden) return;
+    cmtKey=k; const c=CMT[k]; if(!c) return;
+    el("cHead").textContent=c.h; el("cBody").textContent=c.b;
+  }
+  function refreshCtx(){
+    const t=ctxText();
+    el("cCtx").textContent=t; el("cCtx").hidden=!t;
+  }
+
+  /* Misst den real verfügbaren Platz und baut das EKG darauf neu auf.
+     Höhe orientiert sich am Viewport, damit der Plot nicht flach ausgewalzt wird. */
+  function layout(){
+    const panel=el("ekgPanel");
+    const raw=panel.clientWidth;
+    if(!raw) return false;                                     // noch nicht gelayoutet
+    const cw=Math.max(280,Math.round(raw-20));                 // minus Panel-Padding
+    const vh=window.innerHeight||800, narrow=window.innerWidth<760;
+    const ch=narrow ? clamp(Math.round(vh*0.36),240,400)
+                    : clamp(Math.round(vh*0.60),340,700);
+    if(cw===W&&ch===H) return false;
+    W=cw; H=ch;
+    // Ränder an die Größe anpassen: schmale Displays brauchen weniger Achsenrand
+    L=W<520?44:58; R=W<520?14:26; TT=22; BB=H<300?66:70;
+    const svg=el("ekg");
+    svg.setAttribute("viewBox","0 0 "+W+" "+H);
+    svg.style.height=H+"px";
+    const pw=W-L-R, ph=H-TT-BB;
+    el("plotRect").setAttribute("x",L);el("plotRect").setAttribute("y",TT);
+    el("plotRect").setAttribute("width",pw);el("plotRect").setAttribute("height",ph);
+    const sc=el("scrub");
+    sc.setAttribute("x",L);sc.setAttribute("y",TT);
+    sc.setAttribute("width",pw);sc.setAttribute("height",ph);
+    labels.replaceChildren(); delete labels.dataset.done;      // Wellenlabels neu setzen
+    drawGrid();
+    return true;
+  }
+  function relayout(){ if(layout()) recompute(); }
+
+  /* ===================== now-Linie & Loop ===================== */
+  const nowg=el("nowg");
+  function updateNow(){
+    nowg.replaceChildren();
+    const x=X(state.now);
+    nowg.appendChild(mk("line",{x1:x,y1:TT-2,x2:x,y2:H-BB+2,stroke:"var(--now)","stroke-width":1.6,"stroke-dasharray":"3 4","stroke-opacity":0.95}));
+    nowg.appendChild(mk("circle",{cx:x,cy:Y(sigAt(state.now)),r:4.5,fill:"var(--now)"}));
+    const inTdP=state.tdp&&state.now>=TDP.tOn;
+    if(inTdP&&(RISK.sustained||state.now<TDP.tOn+TDP.tTerm)) updateHeartTdP(state.now-TDP.tOn);
+    else if(inTdP) updateHeart((((state.now-(TDP.tOn+TDP.tTerm+70))%RR)+RR)%RR);
+    else updateHeart(((state.now%RR)+RR)%RR);
+  }
+
+  const state={playing:false,scrub:false,now:250,slow:6,tdp:false,pause:false};
+  let flowT=0,last=performance.now();
+  function frame(ts){
+    const dt=ts-last;last=ts;
+    if((state.playing&&!state.scrub)){state.now+=dt/state.slow;if(state.now>=winT)state.now-=winT;}
+    if(state.playing||state.scrub) flowT+=dt/1000/state.slow;
+    updateNow();
+    requestAnimationFrame(frame);
+  }
+
+  /* Cursor-Scrubbing über dem EKG */
+  const svgE=el("ekg"),scrub=el("scrub");
+  function evtToT(e){const pt=svgE.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;
+    const q=pt.matrixTransform(svgE.getScreenCTM().inverse());return clamp((q.x-L)/(W-L-R)*winT,0,winT);}
+  const startScrub=e=>{state.scrub=true;state.now=evtToT(e);e.preventDefault();};
+  const moveScrub =e=>{if(state.scrub||e.pointerType==="mouse"){state.now=evtToT(e);state.scrub=true;}};
+  const endScrub  =()=>{state.scrub=false;};
+  scrub.addEventListener("pointerdown",startScrub);
+  scrub.addEventListener("pointermove",moveScrub);
+  scrub.addEventListener("pointerleave",endScrub);
+  scrub.addEventListener("pointerup",endScrub);
+
+  /* Transport */
+  el("play").addEventListener("click",()=>{
+    state.playing=!state.playing;
+    el("playIco").textContent=state.playing?"⏸":"▶";
+    el("playTxt").textContent=state.playing?"Pause":"Abspielen";
+  });
+  el("tdp").addEventListener("click",()=>{
+    state.tdp=!state.tdp;
+    el("tdp").classList.toggle("on",state.tdp);
+    el("tdpTxt").textContent=state.tdp?"Sinusrhythmus":"Torsade auslösen";
+    if(state.tdp){state.now=Math.max(0,TDP.tOn-160);state.playing=true;
+      el("playIco").textContent="⏸";el("playTxt").textContent="Pause";}
+    recompute();
+  });
+  el("pause").addEventListener("click",()=>{
+    state.pause=!state.pause;
+    el("pause").classList.toggle("on",state.pause);
+    el("pauseTxt").textContent=state.pause?"Pause aktiv":"Pause davor";
+    recompute();
+  });
+  el("cmtBtn").addEventListener("click",()=>{
+    const c=el("comment"); c.hidden=!c.hidden;
+    el("cmtBtn").classList.toggle("on",!c.hidden);
+    el("cmtTxt").textContent=c.hidden?"Kommentar":"Kommentar aus";
+    if(!c.hidden){cmtKey="";refreshCtx();}
+  });
+  el("slowS").addEventListener("input",e=>{state.slow=+e.target.value;
+    el("slowVal").textContent=state.slow===1?"1× (Echtzeit)":state.slow+"× langsamer";});
+
+  ["qtS","hfS","thrS","kS","mgS"].forEach(id=>el(id).addEventListener("input",recompute));
+
+  /* URL-Query: ?HF=85&QT=60&THR=15&SLOW=8&AUTO=1
+     QT akzeptiert zwei Bedeutungen, unterschieden per Wertebereich (der
+     Schweregrad-Regler geht nur bis 100, ein echtes QT-Intervall liegt
+     praktisch immer deutlich darüber):
+       - 0-100:  Position des "QT-Verlängerung"-Reglers (wie bisher)
+       - >100:   ein echter, gemessener QT-Wert in ms — die Reglerposition,
+                 die bei der übergebenen Herzfrequenz genau diesen Wert
+                 reproduziert, wird numerisch zurückgerechnet (s. solvePForQT
+                 oben), damit z.B. ein Tabellen-Link mit dem tatsächlichen
+                 Messwert die passende Animation zeigt statt nur auf 100%
+                 geklemmt zu werden. */
+  function applyQuery(){
+    const q=new URLSearchParams(location.search);
+    const get=(...ks)=>{for(const [k,v] of q)if(ks.includes(k.toLowerCase()))return v;return null;};
+    const setS=(id,raw)=>{if(raw==null)return;const n=parseFloat(String(raw).replace(",","."));if(!isFinite(n))return;
+      const inp=el(id),mn=+inp.min,mx=+inp.max,st=+inp.step||1;inp.value=Math.round(clamp(n,mn,mx)/st)*st;};
+
+    setS("hfS",get("hf","hr","bpm")); // vor QT setzen — die ms->Regler-Rückrechnung braucht die (ggf. übergebene) Herzfrequenz
+    const qtRaw=get("qt","qtv","p");
+    if(qtRaw!=null){
+      const n=parseFloat(String(qtRaw).replace(",","."));
+      if(isFinite(n)){
+        if(n>100){
+          const RR=60000/(+el("hfS").value);
+          const p=solvePForQT(n,RR);
+          el("qtS").value=Math.round(clamp(p,0,1)*100);
+        } else setS("qtS",n);
+      }
+    }
+    setS("thrS",get("thr","threshold"));
+    const kRaw=get("k","kalium","kplus"), mgRaw=get("mg","magnesium");
+    if(kRaw!=null){const n=parseFloat(String(kRaw).replace(",","."));if(isFinite(n))setS("kS",n*10);}
+    if(mgRaw!=null){const n=parseFloat(String(mgRaw).replace(",","."));if(isFinite(n))setS("mgS",n*100);}
+    const cm=get("kommentar","cmt","text");
+    if(cm&&/^(1|true|on|yes)$/i.test(cm)){el("comment").hidden=false;el("cmtBtn").classList.add("on");
+      el("cmtTxt").textContent="Kommentar aus";}
+    const pz=get("pause");
+    if(pz&&/^(1|true|on|yes)$/i.test(pz)){state.pause=true;el("pause").classList.add("on");
+      el("pauseTxt").textContent="Pause aktiv";}
+    setS("slowS",get("slow","zeitlupe"));state.slow=+el("slowS").value;
+    el("slowVal").textContent=state.slow===1?"1× (Echtzeit)":state.slow+"× langsamer";
+    const auto=get("auto","play");
+    if(auto&&/^(1|true|on|yes)$/i.test(auto)){state.playing=true;el("playIco").textContent="⏸";el("playTxt").textContent="Pause";}
+  }
+
+  applyQuery();
+  layout();
+  recompute();
+  // Auf Größenänderungen reagieren (Rotation, Fensterwechsel, Panel-Umbruch)
+  let rzPending=false;
+  const onResize=()=>{ if(rzPending) return; rzPending=true;
+    requestAnimationFrame(()=>{ rzPending=false; relayout(); }); };
+  window.addEventListener("resize",onResize);
+  window.addEventListener("orientationchange",onResize);
+  if(window.ResizeObserver) new ResizeObserver(onResize).observe(el("ekgPanel"));
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

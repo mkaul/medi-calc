@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="de" translate="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Medikations-Plan</title>
+  <style>
+    :root {
+      --bg:       #0b0f19;
+      --surface:  #141929;
+      --card:     #1a2235;
+      --border:   #2a3450;
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --accent:   #4f9cf9;
+      --green:    #22c55e;
+      --orange:   #f59e0b;
+      --red:      #ef4444;
+      --green-bg: #052e16;
+      --orange-bg:#451a03;
+      --blue-bg:  #0c1a33;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 1rem 1.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    header h1 { font-size: 1.25rem; color: var(--accent); }
+    header p  { color: var(--muted); font-size: 0.82rem; flex: 1; }
+    .app-version { font-size: 0.72rem; font-weight: 500; color: var(--muted); opacity: 0.8; margin-left: 0.3rem; vertical-align: middle; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.45rem 0.9rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 500;
+      transition: opacity 0.15s;
+    }
+    .btn:hover  { opacity: 0.82; }
+    .btn-sm     { padding: 0.3rem 0.7rem; font-size: 0.78rem; }
+    .btn-ghost  { background: transparent; color: var(--accent); border: 1px dashed var(--accent); }
+    .btn-outline{ background: transparent; color: var(--muted);  border: 1px solid var(--border); }
+
+    /* ── grid wrapper ── */
+    #grid-scroll { overflow-x: auto; padding: 1rem 1.5rem 2rem; }
+
+    #plan-grid {
+      display: grid;
+      gap: 8px;
+      min-width: max-content;
+    }
+
+    /* ── column headers ── */
+    .col-header {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      padding: 0.5rem 0.75rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      grid-row: 1;
+    }
+    .col-header .med-name  { color: var(--text); font-size: 0.9rem; }
+    .col-header .med-sub   { color: var(--muted); font-size: 0.7rem; font-weight: 400; margin-top: 2px; }
+
+    /* ── package cards ── */
+    .pkg-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.7rem 0.85rem;
+      /* align-self defaults to stretch — card fills its full grid-row span so
+         cards ending on the same date share the same visual bottom edge. */
+    }
+    .pkg-card.past    { opacity: 0.45; }
+    .pkg-card.current { border-color: var(--green); }
+    .pkg-card.rx-now  { border-color: var(--orange); }
+    .pkg-card.future  { border-style: dashed; }
+
+    .pkg-num   { font-size: 0.68rem; color: var(--muted); margin-bottom: 3px; }
+    .pkg-dates { font-size: 0.82rem; font-weight: 600; line-height: 1.4; }
+    .pkg-days  { font-size: 0.73rem; color: var(--muted); margin-top: 4px; }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      margin-top: 5px;
+      margin-right: 3px;
+    }
+    .b-active  { background: var(--green-bg);  color: var(--green);  }
+    .b-rx      { background: var(--orange-bg); color: var(--orange); }
+    .b-rx-info { background: #1c1a00;          color: #b08010;       } /* Rx-Termin > 14 Tage */
+    .b-future  { background: var(--blue-bg);   color: var(--accent); }
+    .b-done    { background: #1c2030;           color: var(--muted);  }
+
+    /* ── +/− package controls ── */
+    .pkg-controls {
+      display: flex;
+      gap: 4px;
+    }
+    .btn-pkg-ctrl {
+      background: transparent;
+      color: var(--accent);
+      border: 1px dashed var(--accent);
+      border-radius: 7px;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn-pkg-ctrl:hover:not(:disabled) { background: var(--blue-bg); }
+    .btn-pkg-ctrl:disabled { opacity: 0.25; cursor: not-allowed; }
+    .btn-pkg-plus { flex: 1; }
+
+    /* ── notes column ── */
+    .note-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 0.75rem;
+      align-self: start;   /* note cards set row height via content */
+      min-height: 100px;   /* ensures rows are tall enough for pkg-card content */
+    }
+    .note-period {
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .note-ta {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      resize: vertical;
+      min-height: 50px;
+      outline: none;
+      font-family: inherit;
+    }
+    .note-ta::placeholder { color: #374151; }
+
+    /* ── Heute-Linie ── */
+    .today-line {
+      height: 0;
+      border-top: 2px dashed var(--red);
+      align-self: start;
+      pointer-events: none;
+      position: relative;
+      z-index: 10;
+    }
+    .today-line::before {
+      content: 'Heute';
+      position: absolute;
+      top: -1.15em;
+      left: 0;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--red);
+      background: var(--bg);
+      padding: 0 4px;
+      border-radius: 2px;
+    }
+
+    /* ── Medikamente verwalten (editierbare Tabelle) ── */
+    #med-table-section {
+      padding: 1rem 1.5rem 3rem;
+      border-top: 1px solid var(--border);
+    }
+    .section-header { margin-bottom: 0.85rem; }
+    .section-header h2 { font-size: 1.05rem; color: var(--text); margin-bottom: 0.2rem; }
+    .section-header p  { color: var(--muted); font-size: 0.78rem; }
+
+    .table-scroll { overflow-x: auto; margin-bottom: 0.85rem; }
+    #med-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      min-width: 780px;
+    }
+    #med-table th, #med-table td {
+      padding: 0.4rem 0.5rem;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    #med-table th {
+      color: var(--muted);
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    #med-table input[type="text"],
+    #med-table input[type="date"],
+    #med-table input[type="number"] {
+      width: 100%;
+      min-width: 90px;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.3rem 0.45rem;
+      font-family: inherit;
+      font-size: 0.8rem;
+    }
+    #med-table input:focus { outline: none; border-color: var(--accent); }
+    #med-table input[type="checkbox"] { width: 16px; height: 16px; }
+    #med-table td:last-child { white-space: nowrap; }
+    .dur-hist { margin-top: 0.25rem; color: var(--muted); font-size: 0.7rem; line-height: 1.4; white-space: nowrap; }
+    .dur-hist-rm {
+      background: none; border: none; padding: 0 0.2rem;
+      color: var(--muted); font: inherit; cursor: pointer;
+    }
+    .dur-hist-rm:hover { color: var(--red); }
+
+    @media (max-width: 600px) {
+      header  { padding: 0.75rem 1rem 0.6rem; }
+      #grid-scroll { padding: 0.75rem 0.5rem 2rem; }
+      #med-table-section { padding: 0.85rem 1rem 2.5rem; }
+    }
+  </style>
+  <!-- Konfiguration: öffentlich (config-system.js) + persönlich (config-user.js,
+       optional, nicht im Repository) → APP_CONFIG; lädt auch private Module. -->
+  <script src="config-system.js"></script>
+  <script src="config-user.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+
+<header>
+  <h1>Medikations-Plan</h1>
+  <p>Packungsverwaltung · Rezept-Erinnerungen · Nebenwirkungen</p>
+  <div id="hbm-root"></div>
+</header>
+
+<div id="hbm-page-slot" hidden>
+  <button class="hbm-item" id="btn-download">⬇ Notizen als JSON</button>
+  <button class="hbm-item" id="btn-upload">⬆ Notizen laden</button>
+  <input type="file" id="file-input" accept=".json,application/json" style="display:none">
+  <button class="hbm-item" id="btn-med-download">⬇ Medikamente als JSON</button>
+  <button class="hbm-item" id="btn-med-upload">⬆ Medikamente laden</button>
+  <input type="file" id="med-file-input" accept=".json,application/json" style="display:none">
+</div>
+<script src="header-menu.js"></script>
+<script>createHeaderMenu({ current: 'plan' });</script>
+
+<div id="grid-scroll">
+  <div id="plan-grid"></div>
+</div>
+
+<section id="med-table-section">
+  <div class="section-header">
+    <h2>Medikamente verwalten</h2>
+    <p>Änderungen werden sofort gespeichert. „Name" muss eindeutig sein. Eine neue Dauer (z. B. größere Packung) gilt ab einem wählbaren Datum – bereits begonnene Packungen bleiben unverändert.</p>
+  </div>
+  <div class="table-scroll">
+    <table id="med-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Beschreibung</th>
+          <th>Zusatz</th>
+          <th>Start</th>
+          <th>Einmalig</th>
+          <th>Dauer (Tage)</th>
+          <th>Ende (bei Einmalig)</th>
+          <th>Rezept-Vorlauf (Tage)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="med-table-body"></tbody>
+    </table>
+  </div>
+  <button class="btn btn-ghost" id="btn-add-med">+ Neue Zeile</button>
+</section>
+
+<script>
+// ── MEDICATION DATA ───────────────────────────────────────────────────────────
+// MEDICATION is a mutable `let`, persisted in IndexedDB (see initMedication()
+// below) and editable via the table at the bottom of the page. DEFAULT_MEDICATION
+// is only the initial seed value used the very first time the app runs.
+
+// Start data from the configuration (config-user.js → seed.medication),
+// empty without one. Deep-copied so edits never mutate APP_CONFIG.
+const DEFAULT_MEDICATION = JSON.parse(JSON.stringify(window.APP_CONFIG.seed.medication || {}));
+
+let MEDICATION = DEFAULT_MEDICATION;
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+
+const today = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
+
+function parseDate(s) {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function isoDate(d)    { const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
+function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function fmtDE(d) {
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// ── PACKAGE COMPUTATION ───────────────────────────────────────────────────────
+
+// A medication's package duration can change over time (e.g. 50er → 100er
+// Packung): `duration` is the initial value, `durationChanges` an optional list
+// of { from: 'YYYY-MM-DD', duration } steps. Malformed entries (e.g. from an
+// imported JSON file) are ignored. Cleared steps are stored as [] rather than
+// deleting the field: the ZIP import (bulk-import.js) merges field by field
+// and never deletes, so only an explicit [] carries the removal to another device.
+function durationChanges(med) {
+  return (Array.isArray(med.durationChanges) ? med.durationChanges : [])
+    .filter(c => c && typeof c.from === 'string' && Number.isInteger(c.duration) && c.duration > 0)
+    .sort((a, b) => a.from.localeCompare(b.from));
+}
+
+// Duration of the package starting on `date`: the latest step with from ≤ date.
+// A step dated mid-package therefore only takes effect from the next package on.
+function durationAt(med, date) {
+  let dur = med.duration || 28;
+  durationChanges(med).forEach(c => { if (parseDate(c.from) <= date) dur = c.duration; });
+  return dur;
+}
+
+// The duration currently configured for the future (shown in the table).
+function latestDuration(med) {
+  const ch = durationChanges(med);
+  return ch.length ? ch[ch.length - 1].duration : (med.duration || 28);
+}
+
+// extraCount: number of additional future packages the user added via "Next"
+function computePackages(med, extraCount) {
+  const start = parseDate(med.start);
+
+  if (med.oneTime) {
+    const end = med.end ? parseDate(med.end) : addDays(start, (med.duration || 28) - 1);
+    return [{ num: 1, start, end }];
+  }
+
+  const pkgs = [];
+  let s = new Date(start);
+  let n = 1;
+
+  while (true) {
+    const e = addDays(s, durationAt(med, s) - 1);
+    pkgs.push({ num: n, start: new Date(s), end: new Date(e) });
+
+    const futureCount = pkgs.filter(p => p.start > today).length;
+    if (e >= today && futureCount >= 2 + extraCount) break;
+
+    s = addDays(e, 1);
+    n++;
+  }
+  return pkgs;
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+
+// extraPacks keys are looked up defensively (extraPacks[k] || 0) everywhere,
+// since MEDICATION's keys can now change at runtime (add/rename/delete via
+// the table below) — there is no fixed, pre-known set of medication keys.
+const extraPacks = {};
+
+function saveExtraPacks() {
+  try { localStorage.setItem('med-plan-extra', JSON.stringify(extraPacks)); } catch (_) {}
+}
+function loadExtraPacks() {
+  try {
+    const raw = localStorage.getItem('med-plan-extra');
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    Object.keys(saved).forEach(k => { if (Number.isInteger(saved[k])) extraPacks[k] = saved[k]; });
+  } catch (_) {}
+}
+
+// ── INDEXEDDB ─────────────────────────────────────────────────────────────────
+
+let _db = null;
+
+function initDB() {
+  if (_db) return Promise.resolve(_db);
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('med-plan-v1', 2);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('notes'))
+        db.createObjectStore('notes', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('meta'))
+        db.createObjectStore('meta', { keyPath: 'key' });
+    };
+    req.onsuccess = e => {
+      _db = e.target.result;
+      // Let go when another tab upgrades/deletes the DB (reset) instead of blocking it.
+      _db.onversionchange = () => { _db.close(); _db = null; };
+      res(_db);
+    };
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+// ── MEDICATION persistence ──────────────────────────────────────────────────
+
+async function saveMedication() {
+  const db = await initDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('meta', 'readwrite');
+    tx.objectStore('meta').put({ key: 'medication', value: MEDICATION });
+    tx.oncomplete = res;
+    tx.onerror    = () => rej(tx.error);
+  });
+}
+
+async function loadMedication() {
+  const db = await initDB();
+  return new Promise((res, rej) => {
+    const req = db.transaction('meta', 'readonly').objectStore('meta').get('medication');
+    req.onsuccess = () => res(req.result ? req.result.value : null);
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+// Loads MEDICATION from IndexedDB, or — on first run — seeds the store with
+// DEFAULT_MEDICATION so it's persisted from the very start.
+async function initMedication() {
+  try {
+    const saved = await loadMedication();
+    if (saved && typeof saved === 'object' && Object.keys(saved).length > 0) {
+      MEDICATION = saved;
+    } else {
+      await saveMedication();
+    }
+  } catch (e) {
+    console.warn('Konnte Medikamente nicht aus IndexedDB laden, nutze Standardwerte.', e);
+  }
+}
+
+// meta: { periodFrom, periodTo, medications }
+// medications: [{ name, from, to }]  (to=null means ongoing)
+async function saveNote(id, text, meta = {}) {
+  const db = await initDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('notes', 'readwrite');
+    tx.objectStore('notes').put({ id, text, ...meta, savedAt: new Date().toISOString() });
+    tx.oncomplete = res;
+    tx.onerror    = () => rej(tx.error);
+  });
+}
+
+async function loadAllNotes() {
+  const db = await initDB();
+  return new Promise((res, rej) => {
+    const req = db.transaction('notes', 'readonly').objectStore('notes').getAll();
+    req.onsuccess = () => res(req.result);
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+
+let notesCache = {};
+
+async function render() {
+  // Recomputed fresh every render — MEDICATION's keys can change at runtime
+  // (add/rename/delete row in the table below), so this must never be cached.
+  const medKeys = Object.keys(MEDICATION);
+
+  const notes = await loadAllNotes();
+  notesCache  = {};
+  notes.forEach(n => {
+    notesCache[n.id] = n.text;
+    // Alte Exporte verwendeten UTC-basierte IDs (toISOString), die in UTC+-Zeitzonen
+    // einen Tag zu früh waren. Daher auch die um +1 Tag verschobene ID eintragen.
+    if (n.id && n.id.startsWith('note-')) {
+      const shifted = `note-${isoDate(addDays(parseDate(n.id.slice(5)), 1))}`;
+      if (!(shifted in notesCache)) notesCache[shifted] = n.text;
+    }
+  });
+
+  // Compute packages per medication. A medication without a valid start date
+  // (e.g. mid-edit in the table below) simply contributes no packages yet,
+  // instead of breaking the whole render.
+  const allPkgs = {};
+  medKeys.forEach(k => {
+    const med = MEDICATION[k];
+    allPkgs[k] = (med && med.start) ? computePackages(med, extraPacks[k] || 0) : [];
+  });
+
+  // Collect all unique package-start dates → define grid row boundaries
+  const dateSet = new Set();
+  medKeys.forEach(k => allPkgs[k].forEach(p => dateSet.add(isoDate(p.start))));
+
+  // Insert today as its own row boundary so the "Heute" line sits at the exact date.
+  const todayIso  = isoDate(today);
+  const initDates = Array.from(dateSet).sort();
+  if (initDates.length > 0 && todayIso > initDates[0]) dateSet.add(todayIso);
+
+  const sortedDates = Array.from(dateSet).sort();  // ascending ISO strings
+
+  // Row 1 = column headers; rows 2+ = one row per unique start date
+  const dateToRow = {};
+  sortedDates.forEach((d, i) => { dateToRow[d] = i + 2; });
+  const lastDataRow = sortedDates.length + 1; // highest numbered data row
+
+  // For a package, find its end grid row:
+  // = row of the earliest sortedDate that is AFTER pkg.end (ensures cards don't overlap)
+  function endRow(pkg) {
+    const endIso = isoDate(pkg.end);
+    const next   = sortedDates.find(d => d > endIso);
+    return next ? dateToRow[next] : lastDataRow + 1;
+  }
+
+  // Build DOM
+  const grid = document.getElementById('plan-grid');
+  grid.innerHTML = '';
+
+  // Grid columns: [Notes, med1, med2, ...]
+  const COL_NOTES = 1;
+  grid.style.gridTemplateColumns = `180px ${medKeys.map(() => '200px').join(' ')}`;
+
+  // ── Row 1: headers ──────────────────────────────────────────────────────────
+
+  const notesHdr = el('div', 'col-header');
+  notesHdr.style.gridColumn = String(COL_NOTES);
+  notesHdr.innerHTML = '<span class="med-name">Notizen</span><div class="med-sub">Nebenwirkungen</div>';
+  grid.appendChild(notesHdr);
+
+  medKeys.forEach((k, ci) => {
+    const med = MEDICATION[k];
+    const hdr = el('div', 'col-header');
+    hdr.style.gridColumn = String(ci + 2);
+    hdr.innerHTML = `<div class="med-name">${k}</div><div class="med-sub">${med.sub || ''}</div>`;
+    grid.appendChild(hdr);
+  });
+
+  // ── Data rows: package cards ─────────────────────────────────────────────────
+
+  medKeys.forEach((k, ci) => {
+    const med  = MEDICATION[k];
+    const pkgs = allPkgs[k];
+    const col  = ci + 2;
+
+    pkgs.forEach(pkg => {
+      const isPast    = pkg.end < today;
+      const isCurrent = !isPast && pkg.start <= today;
+      const rxDate    = addDays(pkg.end, -(med.rxWarningDays || 14));
+      const rxUrgent  = isCurrent && today >= rxDate && !med.oneTime;  // ≤ 14 Tage
+      const rxPending = isCurrent && !rxUrgent       && !med.oneTime;  // > 14 Tage, trotzdem anzeigen
+
+      let cls = 'pkg-card';
+      if (isPast)         cls += ' past';
+      else if (rxUrgent)  cls += ' rx-now';
+      else if (isCurrent) cls += ' current';
+      else                cls += ' future';
+
+      const card = el('div', cls);
+      card.style.gridColumn = String(col);
+      card.style.gridRow    = `${dateToRow[isoDate(pkg.start)]} / ${endRow(pkg)}`;
+
+      const daysLeft = isCurrent ? Math.round((pkg.end - today) / 86400000) : null;
+
+      let badges = '';
+      if (isCurrent)  badges += '<span class="badge b-active">Aktiv</span>';
+      if (rxPending)  badges += `<span class="badge b-rx-info">Rezept bis ${fmtDE(rxDate)}</span>`;
+      if (rxUrgent)   badges += `<span class="badge b-rx">⚠ Rezept bis ${fmtDE(rxDate)} bestellen!</span>`;
+      if (!isPast && !isCurrent) badges += '<span class="badge b-future">Geplant</span>';
+      if (isPast)     badges += '<span class="badge b-done">Abgeschlossen</span>';
+
+      card.innerHTML = `
+        <div class="pkg-num">Packung ${pkg.num}</div>
+        <div class="pkg-dates">${fmtDE(pkg.start)}<br>– ${fmtDE(pkg.end)}</div>
+        ${daysLeft !== null ? `<div class="pkg-days">${daysLeft} Tage verbleibend</div>` : ''}
+        <div>${badges}</div>
+      `;
+      grid.appendChild(card);
+    });
+
+    // +/− controls — skip one-time meds
+    if (!med.oneTime) {
+      const wrap = el('div', 'pkg-controls');
+      wrap.style.gridColumn = String(col);
+      wrap.style.gridRow    = String(lastDataRow + 1);
+
+      const btnMinus = el('button', 'btn-pkg-ctrl');
+      btnMinus.textContent = '−';
+      btnMinus.title       = 'Letzte Packung entfernen';
+      btnMinus.disabled    = (extraPacks[k] || 0) === 0;
+      btnMinus.addEventListener('click', () => {
+        if ((extraPacks[k] || 0) > 0) { extraPacks[k]--; saveExtraPacks(); render(); }
+      });
+
+      const btnPlus = el('button', 'btn-pkg-ctrl btn-pkg-plus');
+      btnPlus.textContent = '+ Nächste Packung';
+      btnPlus.addEventListener('click', () => { extraPacks[k] = (extraPacks[k] || 0) + 1; saveExtraPacks(); render(); });
+
+      wrap.appendChild(btnMinus);
+      wrap.appendChild(btnPlus);
+      grid.appendChild(wrap);
+    }
+  });
+
+  // ── Notes column ─────────────────────────────────────────────────────────────
+
+  sortedDates.forEach((dateStr, di) => {
+    const startR = dateToRow[dateStr];
+    const nextD  = sortedDates[di + 1];
+    const endR   = nextD ? dateToRow[nextD] : lastDataRow + 1;
+
+    // Period boundaries for this row
+    const periodFrom = dateStr;
+    const periodTo   = nextD ? isoDate(addDays(parseDate(nextD), -1)) : null;
+
+    // For the today row: all medications whose active package crosses today.
+    // For all other rows: medications that START on this date.
+    const isToday = dateStr === todayIso;
+    const rowDate = parseDate(dateStr);
+    const medications = medKeys
+      .filter(k => isToday
+        ? allPkgs[k].some(p => p.start <= rowDate && rowDate <= p.end)
+        : allPkgs[k].some(p => isoDate(p.start) === dateStr))
+      .map(k => {
+        const activePkg = allPkgs[k].find(p =>
+          isToday ? (p.start <= rowDate && rowDate <= p.end)
+                  : isoDate(p.start) === dateStr
+        );
+        return {
+          name:        k,
+          from:        MEDICATION[k].start,
+          to:          MEDICATION[k].end || null,
+          activePkgNr: activePkg ? activePkg.num : null,
+          pkgFrom:     activePkg ? isoDate(activePkg.start) : null,
+          pkgTo:       activePkg ? isoDate(activePkg.end)   : null,
+        };
+      });
+
+    const noteId = `note-${dateStr}`;
+    const saved  = notesCache[noteId] || '';
+    const label  = isToday ? 'Heute' : (medications.map(m => m.name).join(', ') || '—');
+
+    const card = el('div', 'note-card');
+    card.style.gridColumn = String(COL_NOTES);
+    card.style.gridRow    = `${startR} / ${endR}`;
+
+    // Build textarea programmatically so we can assign .value directly (no escaping needed)
+    const ta = document.createElement('textarea');
+    ta.className   = 'note-ta';
+    ta.placeholder = 'Notizen…';
+    ta.rows        = 3;
+    ta.value       = saved;
+
+    const period = el('div', 'note-period');
+    period.textContent = `${fmtDE(parseDate(dateStr))} · ${label}`;
+    card.appendChild(period);
+    card.appendChild(ta);
+    grid.appendChild(card);
+
+    // Inline debounced save — closure captures periodFrom/periodTo/medications
+    let timer;
+    ta.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => saveNote(noteId, ta.value, { periodFrom, periodTo, medications }), 700);
+    });
+  });
+
+  // ── Heute-Linie ──────────────────────────────────────────────────────────────
+  if (dateToRow[todayIso]) {
+    const line = el('div', 'today-line');
+    line.style.gridColumn = `1 / ${medKeys.length + 2}`;  // span all columns
+    line.style.gridRow    = String(dateToRow[todayIso]);
+    grid.appendChild(line);
+  }
+}
+
+// ── MEDICATION TABLE (editable) ─────────────────────────────────────────────
+// Every field commits to MEDICATION, persists to IndexedDB, and re-renders
+// the plan grid immediately. Field edits only re-render the grid (not this
+// table) so the input the user is typing in never loses focus; structural
+// changes (add/rename/delete row) rebuild the whole table.
+
+function renderMedicationTable() {
+  const tbody = document.getElementById('med-table-body');
+  tbody.innerHTML = '';
+  Object.keys(MEDICATION).forEach(key => tbody.appendChild(medRowEl(key, MEDICATION[key])));
+}
+
+function medCellInput(type, value, onCommit, opts) {
+  opts = opts || {};
+  const td = document.createElement('td');
+  const input = document.createElement('input');
+  input.type = type;
+  if (type === 'checkbox') input.checked = !!value;
+  else input.value = value == null ? '' : value;
+  if (opts.attrs) Object.assign(input, opts.attrs);
+
+  if (type === 'checkbox') {
+    input.addEventListener('change', () => onCommit(input.checked));
+  } else if (opts.commitOnBlurOnly) {
+    // Used for the Name field: renaming mid-keystroke (on every debounce
+    // tick) would create/delete keys too eagerly, so this only commits once
+    // the user actually leaves the field (or presses Enter). Same for the
+    // duration, whose commit asks from which date the new value applies.
+    const commit = () => onCommit(input.value);
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+  } else {
+    let timer;
+    const commit = () => onCommit(input.value);
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(commit, 500); });
+    input.addEventListener('blur', () => { clearTimeout(timer); commit(); });
+  }
+  td.appendChild(input);
+  return td;
+}
+
+function medRowEl(key, med) {
+  const tr = document.createElement('tr');
+
+  tr.appendChild(medCellInput('text', key, newName => renameMedication(key, newName.trim()), { commitOnBlurOnly: true }));
+  tr.appendChild(medCellInput('text', med.desc || '', v => updateMedField(key, 'desc', v)));
+  tr.appendChild(medCellInput('text', med.sub || '', v => updateMedField(key, 'sub', v)));
+  tr.appendChild(medCellInput('date', med.start || '', v => updateMedField(key, 'start', v)));
+  tr.appendChild(medCellInput('checkbox', !!med.oneTime, v => updateMedField(key, 'oneTime', v)));
+  tr.appendChild(durationCell(key, med));
+  tr.appendChild(medCellInput('date', med.end || '', v => updateMedField(key, 'end', v)));
+  tr.appendChild(medCellInput('number', med.rxWarningDays ?? 14, v => updateMedField(key, 'rxWarningDays', parseInt(v, 10) || 0), { attrs: { min: 0 } }));
+
+  const delTd = document.createElement('td');
+  const delBtn = el('button', 'btn btn-outline btn-sm');
+  delBtn.textContent = 'Löschen';
+  delBtn.addEventListener('click', () => deleteMedication(key));
+  delTd.appendChild(delBtn);
+  tr.appendChild(delTd);
+
+  return tr;
+}
+
+// Duration input plus the history of its changes ("28 ab Start", "→ 50 ab
+// 05.11.2026 ×"), so a mistaken change can be removed again.
+function durationCell(key, med) {
+  const td = medCellInput('number', latestDuration(med), v => changeDuration(key, parseInt(v, 10) || 1),
+                          { attrs: { min: 1 }, commitOnBlurOnly: true });
+  const changes = durationChanges(med);
+  if (med.oneTime || changes.length === 0) return td;
+
+  const hist = el('div', 'dur-hist');
+  const base = el('div');
+  base.textContent = `${med.duration || 28} ab Start`;
+  hist.appendChild(base);
+  changes.forEach(c => {
+    const line = el('div');
+    line.textContent = `→ ${c.duration} ab ${fmtDE(parseDate(c.from))} `;
+    const rm = el('button', 'dur-hist-rm');
+    rm.textContent = '×';
+    rm.title       = 'Änderung entfernen';
+    rm.addEventListener('click', () => removeDurationChange(key, c.from));
+    line.appendChild(rm);
+    hist.appendChild(line);
+  });
+  td.appendChild(hist);
+  return td;
+}
+
+// Accepts TT.MM.JJJJ (as suggested in the prompt) or JJJJ-MM-TT.
+function parseUserDate(s) {
+  s = s.trim();
+  const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  const iso = m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+                : /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  // Round-trip check rejects impossible dates such as 31.02.
+  return iso && isoDate(parseDate(iso)) === iso ? iso : null;
+}
+
+// A new duration must not rewrite packages that have already begun, so unless
+// the medication hasn't started yet it is stored as a step from a chosen date
+// (default: start of the next package). Entering the start date corrects the
+// duration retroactively for all packages.
+async function changeDuration(key, value) {
+  const med = MEDICATION[key];
+  if (!med || value === latestDuration(med)) return;
+
+  if (med.oneTime || !med.start || parseDate(med.start) > today) {
+    med.duration = value;
+    med.durationChanges = [];
+  } else {
+    const next   = computePackages(med, extraPacks[key] || 0).find(p => p.start > today);
+    const answer = prompt(
+      `Neue Dauer ${value} Tage – ab welchem Datum?\n\n` +
+      `Vorschlag: Beginn der nächsten Packung. Bereits begonnene Packungen bleiben unverändert.\n` +
+      `Startdatum ${fmtDE(parseDate(med.start))} eingeben = rückwirkend für alle Packungen.`,
+      next ? fmtDE(next.start) : fmtDE(today));
+    const from = answer === null ? null : parseUserDate(answer);
+    if (!from) {
+      if (answer !== null) alert(`„${answer}" ist kein gültiges Datum (TT.MM.JJJJ).`);
+      renderMedicationTable();
+      return;
+    }
+    // The new step replaces all steps from its date on.
+    const kept = durationChanges(med).filter(c => c.from < from);
+    if (from <= med.start) {
+      med.duration = value;
+      med.durationChanges = [];
+    } else {
+      med.durationChanges = [...kept, { from, duration: value }];
+    }
+  }
+  await saveMedication();
+  await render();
+  renderMedicationTable();
+}
+
+async function removeDurationChange(key, from) {
+  const med = MEDICATION[key];
+  if (!med) return;
+  const changes = durationChanges(med);
+  const c = changes.find(x => x.from === from);
+  if (!c) return;
+  const prev = durationAt(med, addDays(parseDate(from), -1));
+  if (!confirm(`Änderung auf ${c.duration} Tage ab ${fmtDE(parseDate(from))} entfernen?\n` +
+               `Packungen ab dann werden wieder mit ${prev} Tagen berechnet.`)) return;
+  const rest = changes.filter(x => x !== c);
+  med.durationChanges = rest;
+  await saveMedication();
+  await render();
+  renderMedicationTable();
+}
+
+async function updateMedField(key, field, value) {
+  if (!MEDICATION[key]) return;
+  if (field === 'rxWarningDays') {
+    MEDICATION[key][field] = value;
+  } else if (field === 'oneTime') {
+    MEDICATION[key].oneTime = !!value;
+  } else if (field === 'start') {
+    if (!value) return; // Start ist Pflichtfeld für die Packungsberechnung — leer wird ignoriert.
+    MEDICATION[key].start = value;
+  } else if (field === 'end') {
+    if (value) MEDICATION[key].end = value; else delete MEDICATION[key].end;
+  } else {
+    if (value) MEDICATION[key][field] = value; else delete MEDICATION[key][field];
+  }
+  await saveMedication();
+  await render();
+}
+
+async function renameMedication(oldKey, newKey) {
+  if (!newKey || newKey === oldKey) { renderMedicationTable(); return; }
+  if (MEDICATION[newKey]) { alert(`„${newKey}" existiert bereits.`); renderMedicationTable(); return; }
+  const details = MEDICATION[oldKey];
+  delete MEDICATION[oldKey];
+  MEDICATION[newKey] = details;
+  extraPacks[newKey] = extraPacks[oldKey] || 0;
+  delete extraPacks[oldKey];
+  saveExtraPacks();
+  await saveMedication();
+  await render();
+  renderMedicationTable();
+}
+
+async function deleteMedication(key) {
+  if (!confirm(`„${key}" wirklich löschen?`)) return;
+  delete MEDICATION[key];
+  delete extraPacks[key];
+  saveExtraPacks();
+  await saveMedication();
+  await render();
+  renderMedicationTable();
+}
+
+async function addMedication() {
+  const base = 'Neues Medikament';
+  let name = base, i = 1;
+  while (MEDICATION[name]) { i++; name = `${base} ${i}`; }
+  MEDICATION[name] = { desc: '', sub: '', start: isoDate(today), duration: 28, rxWarningDays: 14 };
+  extraPacks[name] = 0;
+  saveExtraPacks();
+  await saveMedication();
+  await render();
+  renderMedicationTable();
+}
+
+document.getElementById('btn-add-med').addEventListener('click', addMedication);
+
+function el(tag, cls) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  return e;
+}
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── DOWNLOAD ──────────────────────────────────────────────────────────────────
+
+document.getElementById('btn-download').addEventListener('click', async () => {
+  const notes = await loadAllNotes();
+  const json  = JSON.stringify(notes, null, 2);
+  const blob  = new Blob([json], { type: 'application/json' });
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href      = url;
+  a.download  = `medikation-notizen-${isoDate(today)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000); // immediate revoke can cancel the download in Safari
+});
+
+// ── UPLOAD ───────────────────────────────────────────────────────────────────
+
+document.getElementById('btn-upload').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+
+document.getElementById('file-input').addEventListener('change', async (evt) => {
+  const file = evt.target.files[0];
+  if (!file) return;
+  evt.target.value = '';
+  let notes;
+  try {
+    notes = JSON.parse(await file.text());
+  } catch {
+    alert('Ungültige JSON-Datei.');
+    return;
+  }
+  if (!Array.isArray(notes)) { alert('Ungültiges Format: Array erwartet.'); return; }
+  const db = await initDB();
+  const tx = db.transaction('notes', 'readwrite');
+  const store = tx.objectStore('notes');
+  notes.forEach(n => { if (n && n.id) store.put(n); });
+  await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+  await render();
+});
+
+// ── MEDIKAMENTE: DOWNLOAD / UPLOAD ──────────────────────────────────────────
+// Full-state JSON export/import for MEDICATION — this is how the medication
+// list is transferred from one device to another (e.g. iPhone ↔ Mac), since
+// everything else is only persisted locally in this browser's IndexedDB.
+
+document.getElementById('btn-med-download').addEventListener('click', () => {
+  const json = JSON.stringify(MEDICATION, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `medikamente-${isoDate(today)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000); // immediate revoke can cancel the download in Safari
+});
+
+document.getElementById('btn-med-upload').addEventListener('click', () => {
+  document.getElementById('med-file-input').click();
+});
+
+document.getElementById('med-file-input').addEventListener('change', async (evt) => {
+  const file = evt.target.files[0];
+  if (!file) return;
+  evt.target.value = '';
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch {
+    alert('Ungültige JSON-Datei.');
+    return;
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    alert('Ungültiges Format: JSON-Objekt mit Medikamenten erwartet.');
+    return;
+  }
+  if (!confirm('Aktuelle Medikamentenliste durch die Datei ersetzen?')) return;
+  MEDICATION = data;
+  await saveMedication();
+  await render();
+  renderMedicationTable();
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+
+(async () => {
+  await initMedication();
+  loadExtraPacks();
+  await render();
+  renderMedicationTable();
+})();
+</script>
+<script src="update.js"></script>
+<script src="save-file.js"></script>
+<script src="bulk-import.js"></script>
+</body>
+</html>

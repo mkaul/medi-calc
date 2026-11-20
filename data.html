@@ -1,0 +1,2069 @@
+<!DOCTYPE html>
+<html lang="de" translate="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Medizinische Zeitreihen</title>
+  <style>
+    :root {
+      --bg:        #0b0f19;
+      --surface:   #141929;
+      --card:      #1a2235;
+      --border:    #2a3450;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --accent:    #4f9cf9;
+      --green:     #22c55e;
+      --orange:    #f59e0b;
+      --red:       #ef4444;
+      --purple:    #a78bfa;
+      --indigo:    #6366f1;
+      --green-bg:  #052e16;
+      --orange-bg: #451a03;
+      --blue-bg:   #0c1a33;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      background-image:
+        radial-gradient(at 0% 0%, rgba(79,156,249,0.10) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(99,102,241,0.10) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ────────────────────────────────────────────────────── */
+    header {
+      padding: 1rem 1.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    header h1 { font-size: 1.25rem; color: var(--accent); }
+    header p  { color: var(--muted); font-size: 0.82rem; flex: 1; }
+    .app-version { font-size: 0.72rem; font-weight: 500; color: var(--muted); opacity: 0.8; margin-left: 0.3rem; vertical-align: middle; }
+
+    /* ── Buttons ───────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.45rem 0.9rem; border-radius: 6px; border: none;
+      cursor: pointer; font-size: 0.82rem; font-weight: 500;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    .btn:hover { opacity: 0.82; }
+    .btn-sm    { padding: 0.28rem 0.6rem; font-size: 0.75rem; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-outline { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-outline:hover { color: var(--text); border-color: var(--accent); opacity: 1; }
+    .btn-danger  { background: transparent; color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+    .btn-danger:hover  { background: rgba(239,68,68,0.1); opacity: 1; }
+    .btn-success { background: var(--green); color: #fff; }
+
+    /* ── Main layout ───────────────────────────────────────────────── */
+    main { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1.25rem 3rem; display: flex; flex-direction: column; gap: 1.25rem; }
+
+    /* ── Glass panels ──────────────────────────────────────────────── */
+    .panel {
+      background: rgba(20,25,41,0.7);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.1rem 1.25rem;
+      backdrop-filter: blur(10px);
+    }
+    .panel-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.85rem;
+    }
+
+    /* ── Chart section ─────────────────────────────────────────────── */
+    .chart-with-animation { display: flex; gap: 1.25rem; align-items: flex-start; }
+    .chart-col { flex: 1 1 60%; min-width: 0; }
+    .chart-wrap {
+      position: relative;
+      height: 360px;
+      width: 100%;
+    }
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      margin-top: 0.9rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .legend-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-rect { width: 14px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+    .legend-dash { width: 16px; height: 0; border-top-width: 2px; border-top-style: dashed; flex-shrink: 0; }
+
+    .events-legend {
+      margin-top: 0.75rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .evt-badge {
+      font-size: 0.73rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      border: 1px solid currentColor;
+      opacity: 0.85;
+    }
+
+    /* ── Tabs ──────────────────────────────────────────────────────── */
+    /* On narrow screens the tabs don't fit; without flex-wrap or
+       overflow-x, a plain flex row just overflows past the viewport edge
+       and drags the whole page into horizontal scroll to reveal the last
+       tab. overflow-x here scopes the scrolling to the tab strip itself —
+       swipe the tabs, not the page (standard mobile tab-bar pattern). */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab  {
+      padding: 0.55rem 1.1rem;
+      font-size: 0.82rem;
+      cursor: pointer;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+      user-select: none;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-panel  { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Form row ──────────────────────────────────────────────────── */
+    .form-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      align-items: flex-end;
+      margin-bottom: 1rem;
+    }
+    .form-field { display: flex; flex-direction: column; gap: 0.3rem; }
+    .form-field label { font-size: 0.73rem; color: var(--muted); }
+    .form-field input, .form-field textarea, .form-field select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 0.4rem 0.65rem;
+      font-size: 0.82rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-field input:focus, .form-field textarea:focus { border-color: var(--accent); }
+    .form-field input[type="date"] { color-scheme: dark; }
+    .form-field input[type="number"] { width: 90px; }
+    .form-field .input-wide  { width: 240px; }
+    .form-field .input-date  { width: 145px; }
+    .checkbox-field { flex-direction: row; align-items: center; gap: 0.4rem; }
+    .checkbox-field label { font-size: 0.82rem; color: var(--text); display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+    .checkbox-field input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); }
+    /* Mehrfachauswahl (mehrere Merkmale können gleichzeitig zutreffen,
+       anders als bei einem <select>) — für Formulare der Module. */
+    .checkbox-group { display: flex; flex-wrap: wrap; gap: 0.25rem 0.7rem; max-width: 320px; }
+    .checkbox-group label { font-size: 0.8rem; color: var(--text); display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
+    .checkbox-group input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--accent); }
+    .td-therapy-start { text-align: center; }
+    .td-therapy-start input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+
+    /* ── Toggle switch (z.B. Morgens/Abends) ─────────────────────────── */
+    .toggle-group {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .toggle-btn {
+      background: var(--surface);
+      color: var(--muted);
+      border: none;
+      padding: 0.4rem 0.75rem;
+      font-size: 0.82rem;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .toggle-btn + .toggle-btn { border-left: 1px solid var(--border); }
+    .toggle-btn.active { background: var(--accent); color: #fff; }
+
+    /* ── Data tables ───────────────────────────────────────────────── */
+    .data-table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    thead th {
+      text-align: left;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr { border-bottom: 1px solid rgba(42,52,80,0.5); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(79,156,249,0.04); }
+    tbody td { padding: 0.5rem 0.75rem; vertical-align: middle; }
+    .td-date { font-weight: 600; color: var(--text); white-space: nowrap; }
+    .td-val  { color: var(--text); }
+    .td-sub  { color: var(--muted); font-size: 0.75rem; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .td-unit { color: var(--muted); }
+    .empty-row td { padding: 1.5rem 0.75rem; color: var(--muted); text-align: center; }
+    #bp-tfoot tr { border-top: 2px solid var(--border); background: rgba(79,156,249,0.05); }
+    #bp-tfoot td { font-weight: 700; color: var(--text); }
+    #bp-tfoot .td-sub { font-weight: 400; }
+
+    @media (max-width: 600px) {
+      header  { padding: 0.75rem 1rem 0.6rem; }
+      main    { padding: 0.85rem 0.75rem 2rem; }
+      .form-field .input-wide { width: 100%; }
+      /* .form-row's align-items:flex-end (bottom-aligns fields of uneven
+         height in the normal row layout) means "align to the end of the
+         cross axis" — once flex-direction switches to column here, the
+         cross axis becomes horizontal, so the very same rule right-aligns
+         every stacked field instead. stretch (+ full-width fields) is what
+         was actually intended for the stacked mobile layout. */
+      .form-row { flex-direction: column; align-items: stretch; }
+      .form-field { width: 100%; }
+      .chart-wrap { height: 280px; }
+    }
+
+  </style>
+  <!-- Konfiguration: öffentlich (config-system.js) + persönlich (config-user.js,
+       optional, nicht im Repository) → APP_CONFIG; lädt auch private Module. -->
+  <script src="config-system.js"></script>
+  <script src="config-user.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+
+<header>
+  <h1>Medizinische Zeitreihen</h1>
+  <p id="page-subtitle">Strahlenbelastung, Therapie-Ereignisse, Blutdruck, QT-Werte und Gewicht</p>
+  <div id="hbm-root"></div>
+</header>
+
+<div id="hbm-page-slot" hidden>
+  <button class="hbm-item" id="btn-export">⬇ JSON exportieren (diese Seite)</button>
+  <button class="hbm-item" id="btn-import">⬆ JSON importieren (diese Seite)</button>
+  <input type="file" id="import-input" accept=".json,application/json" style="display:none">
+</div>
+<script src="header-menu.js"></script>
+<script>createHeaderMenu({ current: 'data' });</script>
+
+<main>
+
+  <!-- Chart -->
+  <div class="panel" id="chart-panel">
+    <div class="panel-title" id="chart-panel-title">Verlauf</div>
+    <div class="chart-with-animation">
+      <div class="chart-col">
+        <div class="chart-wrap">
+          <canvas id="main-chart"></canvas>
+        </div>
+        <div id="chart-below-slot"></div>
+        <div class="chart-legend" id="chart-legend"></div>
+        <div class="events-legend" id="events-legend"></div>
+        <div id="chart-detail-slot"></div>
+      </div>
+      <div id="chart-side-slot" style="display:contents"></div>
+    </div>
+  </div>
+
+  <!-- Data entry + tables -->
+  <div class="panel">
+    <div class="tabs" id="tabs">
+      <div class="tab" data-tab="radiation" data-order="10">Strahlenbelastung</div>
+      <div class="tab" data-tab="events" data-order="20">Therapie-Ereignisse</div>
+      <div class="tab" data-tab="bp" data-order="30">Blutdruck</div>
+      <div class="tab" data-tab="qt" data-order="40">QT-Werte</div>
+      <div class="tab" data-tab="weight" data-order="60">Gewicht</div>
+    </div>
+
+    <!-- ── Tab: Strahlenbelastung ────────────────────────────────── -->
+    <div class="tab-panel" id="tab-radiation">
+      <div class="form-row" id="form-radiation">
+        <div class="form-field">
+          <label>Datum</label>
+          <input type="date" id="rad-date" class="input-date">
+        </div>
+        <div class="form-field">
+          <label>Untersuchungstyp</label>
+          <input type="text" id="rad-typ" class="input-wide" placeholder="z.B. Röntgen, CT …">
+        </div>
+        <div class="form-field">
+          <label>Dosis (mSv)</label>
+          <input type="number" id="rad-dose" min="0" step="0.01" placeholder="z.B. 0.1">
+        </div>
+        <div class="form-field">
+          <label>&nbsp;</label>
+          <button class="btn btn-success" id="btn-add-rad">+ Hinzufügen</button>
+        </div>
+      </div>
+      <div class="data-table-wrap">
+        <table id="rad-table">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Untersuchungstyp</th>
+              <th>Dosis (mSv)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="rad-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Tab: Therapie-Ereignisse ──────────────────────────────── -->
+    <div class="tab-panel" id="tab-events">
+      <div class="form-row" id="form-events">
+        <div class="form-field">
+          <label>Beginn</label>
+          <input type="date" id="evt-begin" class="input-date">
+        </div>
+        <div class="form-field">
+          <label>Ende (optional)</label>
+          <input type="date" id="evt-end" class="input-date">
+        </div>
+        <div class="form-field">
+          <label>Beschreibung</label>
+          <input type="text" id="evt-desc" class="input-wide" placeholder="z.B. Therapiebeginn">
+        </div>
+        <div class="form-field checkbox-field" title="Bezugspunkt (Woche 0) für Verlaufs- und Referenzkurven der Module">
+          <label><input type="checkbox" id="evt-therapy-start"> Therapiestart</label>
+        </div>
+        <div class="form-field">
+          <label>&nbsp;</label>
+          <button class="btn btn-success" id="btn-add-evt">+ Hinzufügen</button>
+        </div>
+      </div>
+      <div class="data-table-wrap">
+        <table id="evt-table">
+          <thead>
+            <tr>
+              <th>Beginn</th>
+              <th>Ende</th>
+              <th>Beschreibung</th>
+              <th title="Bezugspunkt (Woche 0) für Verlaufs- und Referenzkurven der Module">Therapiestart</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="evt-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Tab: Blutdruck ────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-bp">
+      <div class="form-row" id="form-bp">
+        <div class="form-field">
+          <label>Datum</label>
+          <input type="date" id="bp-date" class="input-date">
+        </div>
+        <div class="form-field">
+          <label>Tageszeit</label>
+          <div class="toggle-group" id="bp-time" data-value="morgens">
+            <button type="button" class="toggle-btn active" data-value="morgens">Morgens</button>
+            <button type="button" class="toggle-btn" data-value="abends">Abends</button>
+          </div>
+        </div>
+        <div class="form-field">
+          <label>Systolisch (mmHg)</label>
+          <input type="number" id="bp-sys" min="0" step="1" placeholder="z.B. 130">
+        </div>
+        <div class="form-field">
+          <label>Diastolisch (mmHg)</label>
+          <input type="number" id="bp-dia" min="0" step="1" placeholder="z.B. 85">
+        </div>
+        <div class="form-field">
+          <label>Puls (bpm)</label>
+          <input type="number" id="bp-pulse" min="0" step="1" placeholder="z.B. 72">
+        </div>
+        <div class="form-field">
+          <label>Bemerkung</label>
+          <input type="text" id="bp-note" placeholder="z.B. nach Spaziergang">
+        </div>
+        <div class="form-field">
+          <label>&nbsp;</label>
+          <button class="btn btn-success" id="btn-add-bp">+ Hinzufügen</button>
+        </div>
+      </div>
+      <div class="data-table-wrap">
+        <table id="bp-table">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Tageszeit</th>
+              <th>Systolisch (mmHg)</th>
+              <th>Diastolisch (mmHg)</th>
+              <th>Puls (bpm)</th>
+              <th>Bemerkung</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="bp-tbody"></tbody>
+          <tfoot id="bp-tfoot"></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Tab: QT-Werte ─────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-qt">
+      <p class="td-sub" style="margin-bottom:0.75rem;max-width:none;white-space:normal;">
+        Werte manuell nach Ausmessung einer KardiaMobile-6L-Aufzeichnung eintragen (Tangenten-Methode für QT-Intervall, siehe <a href="EKG.html" style="color:var(--accent);">QT-Simulator ↗</a> — auch im ☰-Menü). QTc (Bazett/Fridericia) und die Änderung ggü. der ersten Messung werden automatisch berechnet. Ein auffälliger Trend oder Werte ≥470-500&nbsp;ms gehören ärztlich mit einem echten 12-Kanal-EKG abgeklärt — dies ist ein Verlaufs-Hilfsmittel, kein Ersatz dafür.
+      </p>
+      <div class="form-row" id="form-qt">
+        <div class="form-field">
+          <label>Datum</label>
+          <input type="date" id="qt-date" class="input-date">
+        </div>
+        <div class="form-field">
+          <label>Herzfrequenz (HF, /min)</label>
+          <input type="number" id="qt-hf" min="0" step="1" placeholder="z.B. 75">
+        </div>
+        <div class="form-field">
+          <label>QT-Intervall (ms)</label>
+          <input type="number" id="qt-qt" min="0" step="1" placeholder="z.B. 380">
+        </div>
+        <div class="form-field">
+          <label>RR-Intervall (ms)</label>
+          <input type="number" id="qt-rr" min="0" step="1" placeholder="z.B. 800">
+        </div>
+        <div class="form-field">
+          <label>Differenz Threshold−Tangente (ms)</label>
+          <input type="number" id="qt-diff" step="1" placeholder="z.B. 7">
+        </div>
+        <div class="form-field">
+          <label>Threshold-Parameter (%)</label>
+          <input type="number" id="qt-threshold" min="1" max="40" step="1" placeholder="z.B. 10">
+        </div>
+        <div class="form-field">
+          <label>Bemerkung</label>
+          <input type="text" id="qt-note" placeholder="z.B. vor Medikamenteneinnahme">
+        </div>
+        <div class="form-field">
+          <label>&nbsp;</label>
+          <button class="btn btn-success" id="btn-add-qt">+ Hinzufügen</button>
+        </div>
+      </div>
+      <div class="data-table-wrap">
+        <table id="qt-table">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>HF (/min)</th>
+              <th>QT-Intervall (ms)</th>
+              <th>QTc (Bazett)</th>
+              <th>QTc (Fridericia)</th>
+              <th>ΔQTc ggü. Baseline</th>
+              <th>Status</th>
+              <th>RR-Intervall (ms)</th>
+              <th>Differenz (Thr.−Tan.)</th>
+              <th>Threshold-Param.</th>
+              <th>Bemerkung</th>
+              <th>Animation</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="qt-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Tab: Gewicht ──────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-weight">
+      <div class="form-row" id="form-weight">
+        <div class="form-field">
+          <label>Datum</label>
+          <input type="date" id="weight-date" class="input-date">
+        </div>
+        <div class="form-field">
+          <label>Gewicht (kg)</label>
+          <input type="number" id="weight-kg" min="0" step="0.1" placeholder="z.B. 72.5">
+        </div>
+        <div class="form-field">
+          <label>Bemerkung</label>
+          <input type="text" id="weight-note" placeholder="z.B. morgens nüchtern">
+        </div>
+        <div class="form-field">
+          <label>&nbsp;</label>
+          <button class="btn btn-success" id="btn-add-weight">+ Hinzufügen</button>
+        </div>
+      </div>
+      <div class="data-table-wrap">
+        <table id="weight-table">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Gewicht (kg)</th>
+              <th>Δ ggü. Vormessung</th>
+              <th>Δ ggü. erster Messung</th>
+              <th>Bemerkung</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="weight-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="chart-crosshair.js"></script>
+<script>
+// ── INITIAL DATA ──────────────────────────────────────────────────────────────
+
+// Start data from the configuration (config-user.js → seed); only used
+// while the database has no record yet (first run). Deep copies, so edits
+// never mutate APP_CONFIG.
+const SEED = window.APP_CONFIG.seed;
+const seedCopy = v => JSON.parse(JSON.stringify(v));
+const DEFAULT_RADIATION = seedCopy(SEED.radiation || {});
+const DEFAULT_EVENTS    = seedCopy(SEED.events || []);
+const DEFAULT_BP        = seedCopy(SEED.bp || []);
+const DEFAULT_QT        = seedCopy(SEED.qt || []);
+const DEFAULT_WEIGHT    = seedCopy(SEED.weight || []);
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+
+let radiationData = {};
+let events        = [];
+// Blutdruck ist ein Array (nicht datumsgekeyt wie radiationData),
+// da an einem Tag durchaus mehrere Messungen anfallen können (z.B. morgens/abends).
+let bpData        = [];
+// QT-Werte: ebenfalls ein Array wie bpData — mehrere KardiaMobile-Aufzeichnungen
+// am selben Tag sind möglich (z.B. vor/nach Medikamenteneinnahme).
+let qtData        = [];
+// Gewicht: Array wie bpData, chronologisch nach Datum sortiert.
+let weightData     = [];
+let chart         = null;
+
+// ── MODULE ────────────────────────────────────────────────────────────────────
+// Weitere Tabs kommen aus Modulen (config-user.js → privateScripts), die sich
+// per MediModules.register({ id, data: {...} }) anmelden — siehe config.js.
+// Ein data-Hook kann enthalten (alles optional außer tab):
+//   tab:        { id, label, order }     Tab "id", Panel #tab-<id>
+//   panelHtml:  Inhalt des Tab-Panels    extraHtml: ans <body> (z.B. Modals)
+//   css:        zusätzliche Styles        chartTitle: Titel über dem Chart
+//   chartBelowHtml / chartSideHtml / chartDetailHtml: Elemente im Chart-Panel
+//   contextChart: true → zeichnet sein Chart auch auf den Tabs Strahlung/Ereignisse
+//   dateInputs: [ids] → mit "heute" vorbelegt (siehe refreshDateDefaults)
+//   load(dbGet), save(dbPut) → Promise[], tombIds() → Löschvermerk-IDs vorhandener Einträge
+//   renderTable(), buildChart(), onLeaveChart(), init()
+//   exportPage() → Teil des JSON-Exports, importPage(payload)
+// Module nutzen die globalen Helfer dieser Seite: chart, events, toTs, fmtDE,
+// isoToday, nowTimeLocal, escHtml, saveAll, renderAll, renderChartForActiveTab,
+// markDeleted, confirmDelete, eventLinePlugin, getTherapyStartTs, lastKnownToday.
+const DATA_MODULES = window.MediModules.with('data')
+  .filter(m => window.APP_CONFIG.isTabEnabled(m.data.tab.id));
+const moduleById = id => DATA_MODULES.find(m => m.data.tab.id === id);
+
+// ── EVENT COLORS ──────────────────────────────────────────────────────────────
+
+const EVT_COLORS = [
+  { bg: 'rgba(34,197,94,0.10)',   border: '#22c55e', label: '#22c55e'  }, // green
+  { bg: 'rgba(245,158,11,0.10)',  border: '#f59e0b', label: '#f59e0b'  }, // orange
+  { bg: 'rgba(167,139,250,0.10)', border: '#a78bfa', label: '#a78bfa'  }, // purple
+  { bg: 'rgba(239,68,68,0.10)',   border: '#ef4444', label: '#ef4444'  }, // red
+  { bg: 'rgba(99,102,241,0.10)',  border: '#6366f1', label: '#6366f1'  }, // indigo
+];
+
+// ── INDEXEDDB ─────────────────────────────────────────────────────────────────
+
+let _db = null;
+
+function initDB() {
+  if (_db) return Promise.resolve(_db);
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('medical-timeseries-v1', 1);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('store'))
+        db.createObjectStore('store', { keyPath: 'key' });
+    };
+    req.onsuccess = e => {
+      _db = e.target.result;
+      // Let go when another tab upgrades/deletes the DB (reset) instead of blocking it.
+      _db.onversionchange = () => { _db.close(); _db = null; };
+      res(_db);
+    };
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+async function dbGet(key) {
+  const db = await initDB();
+  return new Promise((res, rej) => {
+    const req = db.transaction('store', 'readonly').objectStore('store').get(key);
+    req.onsuccess = () => res(req.result ? req.result.value : null);
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+async function dbPut(key, value) {
+  const db = await initDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('store', 'readwrite');
+    tx.objectStore('store').put({ key, value });
+    tx.oncomplete = res;
+    tx.onerror    = () => rej(tx.error);
+  });
+}
+
+// ── LÖSCHVERMERKE ─────────────────────────────────────────────────────────────
+// Ein bewusstes Löschen hinterlässt { id: Zeitpunkt } (Store-Key 'deleted').
+// Der ZIP-Export nimmt die Vermerke mit, der Import bringt gelöschte Einträge
+// dadurch nicht zurück bzw. bietet an, auf dem anderen Gerät Gelöschtes auch
+// hier zu löschen (siehe bulk-import.js, planMedizinischeDaten — dort steht
+// dieselbe ID-Bildung, beide Stellen müssen übereinstimmen).
+const TOMB = {
+  rad:    date => `rad|${date}`,
+  evt:    e => `evt|${e.begin}|${e.desc}`,
+  bp:     b => `bp|${b.date}|${b.time}`,
+  qt:     q => `qt|${q.date}|${q.qt}`,
+  weight: w => `weight|${w.date}|${w.kg}`,
+};
+let deletedMarks = {};
+
+function markDeleted(id) {
+  deletedMarks[id] = new Date().toISOString();
+}
+
+// Ein Eintrag, der (wieder) existiert, ist nicht mehr gelöscht — so hebt jedes
+// Neuanlegen den Vermerk auf, ohne dass die Add-Handler davon wissen müssen.
+function liftMarksOfExisting() {
+  const present = new Set([
+    ...Object.keys(radiationData).map(TOMB.rad),
+    ...events.map(TOMB.evt),
+    ...bpData.map(TOMB.bp),
+    ...qtData.map(TOMB.qt),
+    ...weightData.map(TOMB.weight),
+    ...DATA_MODULES.flatMap(m => (m.data.tombIds ? m.data.tombIds() : [])),
+  ]);
+  Object.keys(deletedMarks).forEach(id => { if (present.has(id)) delete deletedMarks[id]; });
+}
+
+function confirmDelete(what) {
+  return confirm(`${what} löschen?\n\nDie Löschung wird beim nächsten Daten-Export mitgenommen, damit ein ZIP-Import den Eintrag nicht zurückbringt.`);
+}
+
+async function saveAll() {
+  liftMarksOfExisting();
+  await Promise.all([
+    dbPut('deleted',   deletedMarks),
+    dbPut('radiation', radiationData),
+    dbPut('events',    events),
+    dbPut('bp',        bpData),
+    dbPut('qt',        qtData),
+    dbPut('weight',    weightData),
+    ...DATA_MODULES.flatMap(m => (m.data.save ? m.data.save(dbPut) : [])),
+  ]);
+}
+
+async function loadAll() {
+  const [r, ev, bp, qt, weight, deleted] = await Promise.all([
+    dbGet('radiation'),
+    dbGet('events'),
+    dbGet('bp'),
+    dbGet('qt'),
+    dbGet('weight'),
+    dbGet('deleted'),
+    ...DATA_MODULES.map(m => (m.data.load ? m.data.load(dbGet) : null)),
+  ]);
+  deletedMarks  = deleted || {};
+  radiationData = r     || DEFAULT_RADIATION;
+  events        = ev    || DEFAULT_EVENTS;
+  bpData        = bp    || DEFAULT_BP;
+  qtData        = qt    || DEFAULT_QT;
+  weightData    = weight || DEFAULT_WEIGHT;
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+
+function fmtDE(iso) {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${d}.${m}.${y}`;
+}
+
+function toTs(iso) {
+  return new Date(iso).getTime();
+}
+
+// QTc formulas (RR in ms) — identical to EKG.html's own simulator, so a
+// value reproduced there via the sliders lands on the same number here.
+// Bazett overcorrects at high heart rates and undercorrects at low ones;
+// Fridericia is the standard cross-check (see EKG.html's own note).
+function qtcBazett(qt, rr) {
+  return qt / Math.sqrt(rr / 1000);
+}
+function qtcFridericia(qt, rr) {
+  return qt / Math.cbrt(rr / 1000);
+}
+
+// ── QT-STATUS ─────────────────────────────────────────────────────────────────
+// Die Schwellen sind keine erfundene Heuristik, sondern etablierte
+// QT-Monitoring-Grenzwerte (ICH E14 / gängige
+// klinische Praxis für medikamentös bedingte QT-Verlängerung). Das Prinzip
+// ist aber dasselbe: die häufigste Ausgabe soll ein ruhiges "im Rahmen, Trend
+// stabil" sein — gewarnt wird erst ab einer tatsächlich bedeutsamen
+// Veränderung, nicht bei jeder Messungenauigkeit im Bereich weniger ms.
+// Werte aus config-system.js → qt (ggf. config-user.js).
+const QT_ABS_BORDERLINE  = window.APP_CONFIG.qt.absBorderline;  // ms QTc — grenzwertig verlängert
+const QT_ABS_CRITICAL    = window.APP_CONFIG.qt.absCritical;    // ms QTc — TdP-Risiko
+const QT_DELTA_ATTENTION = window.APP_CONFIG.qt.deltaAttention; // ms ΔQTc ggü. Baseline — ICH-E14-Schwelle "beachtenswert"
+const QT_DELTA_CRITICAL  = window.APP_CONFIG.qt.deltaCritical;  // ms ΔQTc ggü. Baseline — klinisch signifikanter Anstieg, unabhängig vom Absolutwert
+
+function classifyQtStatus(qtcB, delta) {
+  const absDelta = Math.abs(delta);
+  if (qtcB >= QT_ABS_CRITICAL) return { level: 'critical', text: `QTc ≥ ${QT_ABS_CRITICAL} ms` };
+  if (absDelta >= QT_DELTA_CRITICAL) return { level: 'critical', text: `Anstieg ≥ ${QT_DELTA_CRITICAL} ms ggü. Baseline` };
+  if (qtcB >= QT_ABS_BORDERLINE) return { level: 'attention', text: `QTc ≥ ${QT_ABS_BORDERLINE} ms` };
+  if (absDelta >= QT_DELTA_ATTENTION) return { level: 'attention', text: `Änderung ≥ ${QT_DELTA_ATTENTION} ms ggü. Baseline` };
+  return { level: 'stable', text: 'Im Rahmen, Trend stabil' };
+}
+const QT_STATUS_COLORS = { stable: '#22c55e', attention: '#f59e0b', critical: '#ef4444' };
+const QT_STATUS_ICONS  = { stable: '✅', attention: '⚠️', critical: '⚠️' };
+
+function isoToday() {
+  // toISOString() is UTC-based — shortly after local midnight in timezones
+  // ahead of UTC (e.g. Germany), UTC is still on the previous day, so this
+  // must use local date components instead.
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// HH:MM in local time, for <input type="time">'s value attribute — the input
+// itself then displays it formatted per the browser/OS locale (24h in de-DE).
+function nowTimeLocal() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// The date inputs below are only ever pre-filled with "today" once, at page
+// load — a tab left open across midnight (backgrounded, or just switched
+// away from and back) keeps showing that stale date until reloaded. This
+// re-checks on every tab switch and whenever the page becomes visible again,
+// refreshing each field to the new "today" — but only if it still holds the
+// exact date we last auto-filled it with, so a date the user deliberately
+// changed (e.g. backdating an entry) is never overwritten.
+// Date inputs pre-filled with "today": the core forms plus whatever the
+// modules declare (data.dateInputs).
+function dateInputIds() {
+  return ['rad-date', 'evt-begin', 'bp-date', 'qt-date', 'weight-date',
+    ...DATA_MODULES.flatMap(m => m.data.dateInputs || [])];
+}
+
+let lastKnownToday = isoToday();
+function refreshDateDefaults() {
+  const today = isoToday();
+  if (today === lastKnownToday) return;
+  dateInputIds().forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.value === lastKnownToday) el.value = today;
+  });
+  lastKnownToday = today;
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refreshDateDefaults();
+});
+
+// ── CHART ─────────────────────────────────────────────────────────────────────
+
+function rectsOverlap(a, b) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+const eventLinePlugin = {
+  id: 'eventLines',
+  // Gemeinsam für alle Charts mit Datums-x-Achse (Strahlung, Blutdruck, QT,
+  // Gewicht, Module). options.plugins.eventLines.maxTs begrenzt optional den Bereich,
+  // in dem Linien erscheinen (z. B. nicht im Whisker-Summary-Rand des BP-Charts).
+  afterDraw(chart, args, opts) {
+    const { ctx, chartArea, scales } = chart;
+    if (!chartArea) return;
+    const xScale = scales.x;
+
+    const LABEL_FONT        = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+    const LABEL_TOP_MARGIN  = 16;
+    const LABEL_LANE_HEIGHT = 14; // vertical step between stacked labels (font size + a few px)
+
+    ctx.save();
+    ctx.font = LABEL_FONT;
+
+    // Pass 1: geometry for every visible event's label, independent of any
+    // stacking decision yet.
+    const items = [];
+    events.forEach(evt => {
+      const ts = toTs(evt.begin);
+      if (ts < xScale.min || ts > xScale.max) return;
+      if (opts && opts.maxTs != null && ts > opts.maxTs) return;
+      const x = xScale.getPixelForValue(ts);
+      const textWidth = ctx.measureText(evt.desc).width;
+      const alignRight = !(x + 6 + textWidth < chartArea.right - 2);
+      items.push({
+        evt, x, alignRight,
+        left:  alignRight ? x - 6 - textWidth : x + 6,
+        right: alignRight ? x - 6 : x + 6 + textWidth,
+      });
+    });
+
+    // Pass 2: greedy lane assignment (classic interval-stacking) — a label
+    // only moves to the next lane down when it would actually horizontally
+    // overlap the last label already placed in an earlier lane, instead of
+    // staggering every label on a fixed cycle regardless of need.
+    items.sort((a, b) => a.left - b.left);
+    const laneRightEdge = [];
+    items.forEach(item => {
+      let lane = laneRightEdge.findIndex(edge => item.left > edge + 4);
+      if (lane === -1) lane = laneRightEdge.length;
+      laneRightEdge[lane] = item.right;
+      item.lane = lane;
+    });
+
+    // Vertical dashed lines, always drawn regardless of label placement.
+    ctx.strokeStyle = '#eab308';
+    ctx.lineWidth   = 1.5;
+    ctx.setLineDash([5, 4]);
+    items.forEach(item => {
+      ctx.beginPath();
+      ctx.moveTo(item.x, chartArea.top);
+      ctx.lineTo(item.x, chartArea.bottom);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    // A label landing inside the currently visible Chart.js tooltip is
+    // skipped for this frame rather than nudged elsewhere — the tooltip
+    // already shows the precise values, so it should win outright instead
+    // of both fighting for the same pixels or the label jittering around it.
+    const tt = chart.tooltip;
+    const tooltipBox = tt && tt.opacity > 0
+      ? { left: tt.x, top: tt.y, right: tt.x + tt.width, bottom: tt.y + tt.height }
+      : null;
+
+    ctx.fillStyle = '#eab308';
+    items.forEach(item => {
+      const labelY = chartArea.top + LABEL_TOP_MARGIN + item.lane * LABEL_LANE_HEIGHT;
+      const labelBox = { left: item.left, right: item.right, top: labelY - 9, bottom: labelY + 3 };
+      if (tooltipBox && rectsOverlap(labelBox, tooltipBox)) return;
+      ctx.textAlign = item.alignRight ? 'right' : 'left';
+      ctx.fillText(item.evt.desc, item.alignRight ? item.x - 6 : item.x + 6, labelY);
+    });
+    ctx.restore();
+  }
+};
+
+// ── THERAPIESTART ─────────────────────────────────────────────────────────────
+// Das als "Therapiestart" markierte Ereignis (Tab Therapie-Ereignisse) ist
+// Woche 0 für Verlaufs- und Referenzkurven der Module — ein Daten-Flag, kein
+// fest eingebauter Medikamentenname.
+function findTherapyStartEvent() {
+  return events.find(e => e.isTherapyStart);
+}
+
+// Timestamp of the therapy start, or null when no event is flagged
+// "Therapiestart" or its date is missing/unparseable. toTs('') is NaN, and
+// NaN compares false against everything: an event imported without a start
+// date would otherwise produce reference points with x = NaN. Callers treat
+// null as "no reference curves at all", so chart and legend never disagree.
+function getTherapyStartTs() {
+  const evt = findTherapyStartEvent();
+  if (!evt || !evt.begin) return null;
+  const ts = toTs(evt.begin);
+  return Number.isFinite(ts) ? ts : null;
+}
+
+// ── CHART-PANEL ───────────────────────────────────────────────────────────────
+// Vor jedem Neuaufbau: Modul-Elemente im Chart-Panel (z.B. eine Animation
+// neben dem Chart) ausblenden — das Modul, dessen Chart gleich gezeichnet
+// wird, blendet seine eigenen danach wieder ein.
+function resetChartPanel() {
+  if (chart) { chart.destroy(); chart = null; }
+  DATA_MODULES.forEach(m => { if (m.data.onLeaveChart) m.data.onLeaveChart(); });
+  document.getElementById('chart-legend').innerHTML = '';
+  document.getElementById('events-legend').innerHTML = '';
+}
+
+// ── STRAHLUNGS-CHART ──────────────────────────────────────────────────────────
+// Balken je Untersuchung (mSv) und kumulierte Dosis als Stufenlinie —
+// Kontext-Chart der Tabs Strahlenbelastung/Therapie-Ereignisse, sofern kein
+// Modul diese Rolle übernimmt (data.contextChart).
+function buildRadiationChart() {
+  const dates = Object.keys(radiationData).sort();
+  if (dates.length === 0 && events.length === 0) return;
+
+  let cumulative = 0;
+  const bars = [], cum = [];
+  dates.forEach(d => {
+    const dose = radiationData[d].dose || 0;
+    cumulative += dose;
+    bars.push({ x: toTs(d), y: dose });
+    cum.push({ x: toTs(d), y: cumulative });
+  });
+  const allTs = [...bars.map(p => p.x), ...events.map(e => toTs(e.begin)).filter(Number.isFinite)];
+  const minTs = Math.min(...allTs), maxTs = Math.max(...allTs, toTs(isoToday()));
+  const pad = Math.max((maxTs - minTs) * 0.04, 86400000 * 3);
+  if (cum.length) cum.push({ x: maxTs + pad, y: cumulative });
+
+  const ctx = document.getElementById('main-chart').getContext('2d');
+  chart = new Chart(ctx, {
+    data: {
+      datasets: [
+        { type: 'bar', label: 'Dosis je Untersuchung (mSv)', data: bars, yAxisID: 'yDose',
+          backgroundColor: 'rgba(245,158,11,0.55)', borderColor: '#f59e0b', borderWidth: 1, barThickness: 10 },
+        { type: 'line', label: 'Kumuliert (mSv)', data: cum, yAxisID: 'yCum', stepped: 'before',
+          borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.10)', fill: true, pointRadius: 0, borderWidth: 2 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
+      interaction: { mode: 'nearest', intersect: false },
+      scales: {
+        x: { type: 'linear', min: minTs - pad, max: maxTs + pad,
+          ticks: { color: '#64748b', maxTicksLimit: 10, callback: v => new Date(v).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }) },
+          grid: { color: 'rgba(255,255,255,0.05)' } },
+        yDose: { position: 'left', min: 0, title: { display: true, text: 'Dosis (mSv)', color: '#f59e0b', font: { size: 11 } },
+          ticks: { color: '#f59e0b' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        yCum: { position: 'right', min: 0, title: { display: true, text: 'Kumuliert (mSv)', color: '#a78bfa', font: { size: 11 } },
+          ticks: { color: '#a78bfa' }, grid: { drawOnChartArea: false } },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(20,25,41,0.95)', borderColor: 'rgba(42,52,80,0.8)', borderWidth: 1,
+          titleColor: '#e2e8f0', bodyColor: '#94a3b8',
+          callbacks: {
+            title: items => items.length ? new Date(items[0].parsed.x).toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' }) : '',
+            label: item => {
+              if (item.dataset.yAxisID === 'yCum') return `Kumuliert: ${item.parsed.y.toFixed(2)} mSv`;
+              const iso = new Date(item.parsed.x).toISOString().slice(0, 10);
+              const r = radiationData[iso];
+              return `${r && r.typ ? r.typ + ': ' : ''}${item.parsed.y} mSv`;
+            },
+          },
+        },
+      },
+    },
+    plugins: [eventLinePlugin],
+  });
+  document.getElementById('chart-legend').innerHTML = `
+    <div class="legend-item"><div class="legend-rect" style="background:#f59e0b"></div><span style="color:#f59e0b">Dosis je Untersuchung (mSv)</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div><span style="color:#a78bfa">Kumulierte Dosis — ${cumulative.toFixed(2)} mSv</span></div>
+  `;
+}
+
+// ── BLUTDRUCK-CHART ───────────────────────────────────────────────────────────
+// "Morgens"/"Abends" ist auf Blutdruckdaten die einzige Tageszeit-Information
+// (kein Uhrzeit-Feld) — für eine sinnvolle Position auf der Zeitachse wird
+// morgens auf 06:00 UTC und abends auf 18:00 UTC gemappt, damit zwei Messungen
+// am selben Tag nicht exakt übereinander liegen.
+function bpTimestamp(b) {
+  return toTs(b.date) + (b.time === 'abends' ? 18 : 6) * 3600000;
+}
+
+function medianOf(values) {
+  const valid = values.filter(v => v != null && !isNaN(v)).sort((a, b) => a - b);
+  if (!valid.length) return null;
+  const mid = Math.floor(valid.length / 2);
+  return valid.length % 2 ? valid[mid] : (valid[mid - 1] + valid[mid]) / 2;
+}
+
+// Compact stand-in for a boxplot — min–max range + median tick for
+// Systolisch/Diastolisch, morgens vs. abends — drawn with plain canvas calls
+// in a reserved margin at the chart's right edge (see buildBpChart()'s
+// widened x-axis max below). Deliberately not a real boxplot library: no new
+// CDN dependency, no categorical axis alongside the existing time axis, and
+// this is a summary/decoration, not real time-series data, so it positions
+// itself proportionally to the plotted area rather than at real timestamps.
+//
+// A factory (like createChartCrosshairPlugin), not a shared constant object,
+// because it needs its own private hover state per chart instance — hit-test
+// boxes recomputed every draw, plus which one (if any) is currently hovered,
+// for a small custom tooltip drawn on canvas (Chart.js's own tooltip can't
+// hit-test synthetic elements outside its datasets).
+function createBpSummaryWhiskerPlugin() {
+  let boxes = [];
+  let hovered = null;
+
+  return {
+    id: 'bpSummaryWhisker',
+    afterEvent(chart, args) {
+      const { event } = args;
+      if (event.type === 'mouseout') {
+        if (hovered) { hovered = null; args.changed = true; }
+        return;
+      }
+      if (event.type !== 'mousemove' && event.type !== 'click') return;
+      const hit = boxes.find(b =>
+        event.x >= b.rect.left && event.x <= b.rect.right &&
+        event.y >= b.rect.top  && event.y <= b.rect.bottom
+      ) || null;
+      if (hit !== hovered) {
+        hovered = hit;
+        args.changed = true;
+      }
+    },
+    afterDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      const yScale = scales.yBp;
+      const width = chartArea.right - chartArea.left;
+
+      const groups = [
+        { time: 'morgens', label: 'Morgens', abbr: 'M', colX: chartArea.right - width * 0.15 },
+        { time: 'abends',  label: 'Abends',  abbr: 'A', colX: chartArea.right - width * 0.05 },
+      ];
+      const seriesDefs = [
+        { key: 'sys', label: 'Systolisch', unit: 'mmHg', color: '#ef4444', dx: -5 },
+        { key: 'dia', label: 'Diastolisch', unit: 'mmHg', color: '#4f9cf9', dx: 5 },
+      ];
+
+      boxes = [];
+
+      ctx.save();
+      ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'center';
+
+      groups.forEach(group => {
+        const entries = bpData.filter(b => b.time === group.time);
+        if (!entries.length) return;
+
+        let topY = chartArea.bottom;
+        seriesDefs.forEach(series => {
+          const values = entries.map(b => b[series.key]).filter(v => v != null && !isNaN(v));
+          if (!values.length) return;
+          const min = Math.min(...values), max = Math.max(...values), med = medianOf(values);
+          const x    = group.colX + series.dx;
+          const yMin = yScale.getPixelForValue(min);
+          const yMax = yScale.getPixelForValue(max);
+          const yMed = yScale.getPixelForValue(med);
+
+          ctx.strokeStyle = series.color;
+          ctx.lineWidth   = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(x, yMin);
+          ctx.lineTo(x, yMax);
+          ctx.stroke();
+          [yMin, yMax].forEach(y => {
+            ctx.beginPath();
+            ctx.moveTo(x - 4, y);
+            ctx.lineTo(x + 4, y);
+            ctx.stroke();
+          });
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(x - 6, yMed);
+          ctx.lineTo(x + 6, yMed);
+          ctx.stroke();
+
+          topY = Math.min(topY, yMax);
+
+          boxes.push({
+            rect: { left: x - 8, right: x + 8, top: yMax - 6, bottom: yMin + 6 },
+            groupLabel: group.label, seriesLabel: series.label, unit: series.unit,
+            min, max, med, n: values.length,
+          });
+        });
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText(group.abbr, group.colX, topY - 10);
+      });
+
+      // Dashed separator so the summary margin doesn't read as more real
+      // time-series data.
+      const sepX = chartArea.right - width * 0.20;
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(sepX, chartArea.top);
+      ctx.lineTo(sepX, chartArea.bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (hovered) {
+        const b = hovered;
+        const lines = [
+          `${b.groupLabel} · ${b.seriesLabel}`,
+          `Max: ${b.max.toFixed(0)} ${b.unit}`,
+          `Median: ${b.med.toFixed(0)} ${b.unit}`,
+          `Min: ${b.min.toFixed(0)} ${b.unit}`,
+          `n=${b.n}`,
+        ];
+        ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+        const lineHeight = 15;
+        const boxWidth   = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16;
+        const boxHeight  = lines.length * lineHeight + 10;
+        const anchorX = (b.rect.left + b.rect.right) / 2;
+        const anchorY = (b.rect.top + b.rect.bottom) / 2;
+        let boxX = anchorX - boxWidth / 2;
+        let boxY = anchorY - boxHeight - 12;
+        if (boxY < chartArea.top) boxY = anchorY + 12; // flip below if no room above
+        if (boxX < chartArea.left) boxX = chartArea.left + 2;
+        if (boxX + boxWidth > chartArea.right) boxX = chartArea.right - boxWidth - 2;
+
+        ctx.fillStyle   = 'rgba(20,25,41,0.95)';
+        ctx.strokeStyle = 'rgba(42,52,80,0.8)';
+        ctx.lineWidth   = 1;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 6);
+        else ctx.rect(boxX, boxY, boxWidth, boxHeight);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.textAlign = 'left';
+        lines.forEach((line, i) => {
+          ctx.fillStyle = i === 0 ? '#e2e8f0' : '#94a3b8';
+          ctx.fillText(line, boxX + 8, boxY + 16 + i * lineHeight);
+        });
+      }
+
+      ctx.restore();
+    },
+  };
+}
+
+function buildBpChart() {
+  if (chart) { chart.destroy(); chart = null; }
+  document.getElementById('events-legend').innerHTML = '';
+
+  if (bpData.length === 0) {
+    document.getElementById('chart-legend').innerHTML = '';
+    return;
+  }
+
+  const sorted = [...bpData].sort((a, b) => bpTimestamp(a) - bpTimestamp(b));
+  const sysPoints   = sorted.map(b => ({ x: bpTimestamp(b), y: b.sys }));
+  const diaPoints   = sorted.map(b => ({ x: bpTimestamp(b), y: b.dia }));
+  const pulsePoints = sorted.filter(b => b.pulse != null).map(b => ({ x: bpTimestamp(b), y: b.pulse }));
+
+  const allTs = sorted.map(bpTimestamp);
+  const minTs = Math.min(...allTs);
+  const maxTs = Math.max(...allTs);
+  const span  = maxTs - minTs;
+  const pad   = Math.max(span * 0.04, 86400000);
+  // Extra room on top of the normal `pad` breathing room, reserved for
+  // bpSummaryWhiskerPlugin's morgens/abends min–max–median columns —
+  // proportional to span (like `pad` itself) so it scales sensibly for
+  // both a two-week and a two-year history.
+  const summaryReserve = Math.max(span * 0.22, 86400000 * 3);
+  // Updated on every hover via onHover below, so the tooltip filter (further
+  // down) can tell whether the cursor is over the reserved whisker margin —
+  // mode:'index'/intersect:false has no built-in max distance, so without
+  // this the native tooltip would keep showing the last real measurement's
+  // values underneath bpSummaryWhiskerPlugin's own custom tooltip there.
+  let lastMouseX = null;
+
+  const ctx = document.getElementById('main-chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'Systolisch (mmHg)', data: sysPoints, yAxisID: 'yBp',
+          borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)',
+          tension: 0.3, pointRadius: 4, pointHoverRadius: 7, pointBackgroundColor: '#ef4444',
+        },
+        {
+          label: 'Diastolisch (mmHg)', data: diaPoints, yAxisID: 'yBp',
+          borderColor: '#4f9cf9', backgroundColor: 'rgba(79,156,249,0.08)',
+          tension: 0.3, pointRadius: 4, pointHoverRadius: 7, pointBackgroundColor: '#4f9cf9',
+        },
+        {
+          label: 'Puls (bpm)', data: pulsePoints, yAxisID: 'yPulse',
+          borderColor: '#a78bfa', borderDash: [4, 3],
+          tension: 0.3, pointRadius: 3, pointHoverRadius: 6, pointBackgroundColor: '#a78bfa',
+          spanGaps: true,
+        },
+      ],
+    },
+    options: {
+      responsive:          true,
+      maintainAspectRatio: false,
+      animation:           { duration: 400 },
+      interaction:         { mode: 'index', intersect: false },
+      onHover: (event) => { lastMouseX = event.x; },
+      scales: {
+        x: {
+          type: 'linear',
+          min:  minTs - pad,
+          max:  maxTs + pad + summaryReserve,
+          // The extra summaryReserve span (for bpSummaryWhiskerPlugin's
+          // columns) has no real dates in it — drop any auto-generated tick
+          // that lands past the actual data+pad range instead of showing
+          // meaningless date labels/gridlines under the whisker summary.
+          afterBuildTicks: scale => {
+            scale.ticks = scale.ticks.filter(t => t.value <= maxTs + pad);
+          },
+          ticks: {
+            color: '#64748b',
+            maxTicksLimit: 10,
+            callback: v => new Date(v).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+          },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+        },
+        yBp: {
+          type:     'linear',
+          position: 'left',
+          min:      40,
+          suggestedMax: 180,
+          title:    { display: true, text: 'Blutdruck (mmHg)', color: '#ef4444', font: { size: 11 } },
+          ticks:    { color: '#ef4444' },
+          grid:     { color: 'rgba(255,255,255,0.05)' },
+        },
+        yPulse: {
+          type:     'linear',
+          position: 'right',
+          min:      30,
+          suggestedMax: 140,
+          title:    { display: true, text: 'Puls (bpm)', color: '#a78bfa', font: { size: 11 } },
+          ticks:    { color: '#a78bfa' },
+          grid:     { drawOnChartArea: false },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        eventLines: { maxTs: maxTs + pad },
+        tooltip: {
+          backgroundColor: 'rgba(20,25,41,0.95)',
+          borderColor:     'rgba(42,52,80,0.8)',
+          borderWidth:     1,
+          titleColor:      '#e2e8f0',
+          bodyColor:       '#94a3b8',
+          // Suppresses the native tooltip specifically inside the reserved
+          // whisker margin (bpSummaryWhiskerPlugin has its own tooltip
+          // there) — everywhere else, including genuinely sparse real
+          // measurements, behaves exactly as before.
+          filter: item => lastMouseX == null || lastMouseX < item.chart.scales.x.getPixelForValue(maxTs + pad),
+          callbacks: {
+            // Chart.js calls title() with whatever `filter` above left
+            // over, even if that's nothing (e.g. cursor in the reserved
+            // whisker margin, where every item gets filtered out) — without
+            // this guard, items[0] is undefined and the resulting throw
+            // aborts the tooltip's update cycle, freezing it on-screen with
+            // its last content instead of hiding it.
+            title: items => {
+              if (!items.length) return '';
+              const d = new Date(items[0].parsed.x);
+              const label = d.getUTCHours() >= 12 ? 'Abends' : 'Morgens';
+              return d.toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' }) + ' · ' + label;
+            },
+            // Zeigt die Bemerkung der Messung (falls vorhanden) unterhalb der
+            // Werte — Lookup über den exakten Zeitstempel, da der Punkt genau
+            // aus bpTimestamp(b) gebaut wurde (siehe sysPoints/diaPoints oben).
+            afterBody: items => {
+              if (!items.length) return [];
+              const entry = sorted.find(b => bpTimestamp(b) === items[0].parsed.x);
+              return entry && entry.note ? ['📝 ' + entry.note] : [];
+            },
+          },
+        },
+      },
+    },
+    plugins: [eventLinePlugin, createBpSummaryWhiskerPlugin()],
+  });
+
+  renderBpLegend();
+}
+
+function renderBpLegend() {
+  document.getElementById('chart-legend').innerHTML = `
+    <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div><span style="color:#ef4444">Systolisch (mmHg) — linke Achse</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background:#4f9cf9"></div><span style="color:#4f9cf9">Diastolisch (mmHg) — linke Achse</span></div>
+    <div class="legend-item"><span style="color:var(--muted);">┃ rechts: Min–Max &amp; Median je Morgens (M) / Abends (A)</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div><span style="color:#a78bfa">Puls (bpm) — rechte Achse</span></div>
+  `;
+}
+
+// ── QT-CHART ──────────────────────────────────────────────────────────────────
+// Referenzlinien beziehen sich auf QTc (ratenkorrigiert), nicht auf das
+// unkorrigierte QT-Intervall, das zum Vergleich mit auf derselben Achse
+// dargestellt wird — daher explizit als "QTc ≥ …" beschriftet.
+const qtThresholdLinePlugin = {
+  id: 'qtThresholdLines',
+  afterDraw(chart) {
+    const { ctx, chartArea, scales } = chart;
+    if (!chartArea) return;
+    const yScale = scales.y;
+    const lines = [
+      { value: 470, color: '#fbbf24', label: 'QTc ≥ 470 ms: grenzwertig' },
+      { value: 500, color: '#f43f5e', label: 'QTc ≥ 500 ms: TdP-Risiko' },
+    ];
+    ctx.save();
+    ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'left';
+    lines.forEach(line => {
+      if (line.value < yScale.min || line.value > yScale.max) return;
+      const y = yScale.getPixelForValue(line.value);
+      ctx.strokeStyle = line.color;
+      ctx.globalAlpha  = 0.6;
+      ctx.lineWidth    = 1;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, y);
+      ctx.lineTo(chartArea.right, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle   = line.color;
+      ctx.fillText(line.label, chartArea.left + 4, y - 3);
+    });
+    ctx.restore();
+  },
+};
+
+function buildQtChart() {
+  if (chart) { chart.destroy(); chart = null; }
+  document.getElementById('events-legend').innerHTML = '';
+
+  if (qtData.length === 0) {
+    document.getElementById('chart-legend').innerHTML = '';
+    return;
+  }
+
+  const sorted     = [...qtData].sort((a, b) => a.date.localeCompare(b.date));
+  const qtPoints   = sorted.map(q => ({ x: toTs(q.date), y: q.qt }));
+  const qtcBPoints = sorted.map(q => ({ x: toTs(q.date), y: qtcBazett(q.qt, q.rr) }));
+  const qtcFPoints = sorted.map(q => ({ x: toTs(q.date), y: qtcFridericia(q.qt, q.rr) }));
+
+  const allTs = sorted.map(q => toTs(q.date));
+  const minTs = Math.min(...allTs);
+  const maxTs = Math.max(...allTs);
+  const span  = maxTs - minTs;
+  const pad   = Math.max(span * 0.04, 86400000 * 3);
+
+  const allValues = [...qtPoints, ...qtcBPoints, ...qtcFPoints].map(p => p.y);
+  const yMax = Math.max(520, Math.max(...allValues) * 1.08);
+  const yMin = Math.max(0, Math.min(...allValues) * 0.85);
+
+  const ctx = document.getElementById('main-chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'QT-Intervall (ms)', data: qtPoints,
+          borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.08)',
+          tension: 0.3, pointRadius: 4, pointHoverRadius: 7, pointBackgroundColor: '#a78bfa',
+        },
+        {
+          label: 'QTc (Bazett)', data: qtcBPoints,
+          borderColor: '#ef4444',
+          tension: 0.3, pointRadius: 4, pointHoverRadius: 7, pointBackgroundColor: '#ef4444',
+        },
+        {
+          label: 'QTc (Fridericia)', data: qtcFPoints,
+          borderColor: '#4f9cf9', borderDash: [4, 3],
+          tension: 0.3, pointRadius: 3, pointHoverRadius: 6, pointBackgroundColor: '#4f9cf9',
+        },
+      ],
+    },
+    options: {
+      responsive:          true,
+      maintainAspectRatio: false,
+      animation:           { duration: 400 },
+      interaction:         { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          type: 'linear',
+          min:  minTs - pad,
+          max:  maxTs + pad,
+          ticks: {
+            color: '#64748b',
+            maxTicksLimit: 10,
+            callback: v => new Date(v).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+          },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+        },
+        y: {
+          type:  'linear',
+          min:   yMin,
+          max:   yMax,
+          title: { display: true, text: 'ms', color: '#94a3b8', font: { size: 11 } },
+          ticks: { color: '#94a3b8' },
+          grid:  { color: 'rgba(255,255,255,0.05)' },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(20,25,41,0.95)',
+          borderColor:     'rgba(42,52,80,0.8)',
+          borderWidth:     1,
+          titleColor:      '#e2e8f0',
+          bodyColor:       '#94a3b8',
+          callbacks: {
+            title: items => items.length ? new Date(items[0].parsed.x).toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' }) : '',
+            // Zeigt die Bemerkung der Messung (falls vorhanden) unterhalb der
+            // Werte — Lookup über den exakten Zeitstempel, da der Punkt genau
+            // aus toTs(q.date) gebaut wurde (siehe qtPoints oben).
+            afterBody: items => {
+              if (!items.length) return [];
+              const entry = sorted.find(q => toTs(q.date) === items[0].parsed.x);
+              return entry && entry.note ? ['📝 ' + entry.note] : [];
+            },
+          },
+        },
+      },
+    },
+    plugins: [eventLinePlugin, qtThresholdLinePlugin],
+  });
+
+  renderQtLegend();
+}
+
+function renderQtLegend() {
+  // Zusammenfassender Status oben in der Legende — die häufigste Aussage
+  // soll auf einen Blick "im Rahmen, Trend stabil" sein, nicht erst nach dem
+  // Lesen aller Tabellenzeilen (siehe QT-Status-Kommentar bei classifyQtStatus).
+  const sorted = [...qtData].sort((a, b) => a.date.localeCompare(b.date));
+  const baselineQtcB = qtcBazett(sorted[0].qt, sorted[0].rr);
+  const statuses = sorted.map(q => classifyQtStatus(qtcBazett(q.qt, q.rr), qtcBazett(q.qt, q.rr) - baselineQtcB));
+  const latestStatus = statuses[statuses.length - 1];
+  const stableCount = statuses.filter(s => s.level === 'stable').length;
+
+  document.getElementById('chart-legend').innerHTML = `
+    <div class="legend-item"><span class="evt-badge" style="color:${QT_STATUS_COLORS[latestStatus.level]};">${QT_STATUS_ICONS[latestStatus.level]} Aktuell: ${latestStatus.text}</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div><span style="color:#a78bfa">QT-Intervall (ms, unkorrigiert)</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div><span style="color:#ef4444">QTc (Bazett)</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background:#4f9cf9"></div><span style="color:#4f9cf9">QTc (Fridericia)</span></div>
+    <div class="legend-item"><span style="color:var(--muted);">┄ gestrichelt: QTc-Referenzwerte (470/500 ms)</span></div>
+    <div class="legend-item"><span style="color:var(--muted);">${stableCount} von ${sorted.length} Messung${sorted.length !== 1 ? 'en' : ''} im Rahmen</span></div>
+  `;
+}
+
+// ── GEWICHT-CHART ─────────────────────────────────────────────────────────────
+
+function buildWeightChart() {
+  if (chart) { chart.destroy(); chart = null; }
+  document.getElementById('events-legend').innerHTML = '';
+
+  if (weightData.length === 0) {
+    document.getElementById('chart-legend').innerHTML = '';
+    return;
+  }
+
+  const sorted = [...weightData].sort((a, b) => a.date.localeCompare(b.date));
+  const points = sorted.map(w => ({ x: toTs(w.date), y: w.kg }));
+
+  const allTs = points.map(p => p.x);
+  const minTs = Math.min(...allTs);
+  const maxTs = Math.max(...allTs);
+  const span  = maxTs - minTs;
+  const pad   = Math.max(span * 0.04, 86400000 * 3);
+
+  const values = points.map(p => p.y);
+  const vMin = Math.min(...values);
+  const vMax = Math.max(...values);
+  const vPad = Math.max((vMax - vMin) * 0.15, 1);
+
+  const ctx = document.getElementById('main-chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'Gewicht (kg)', data: points,
+          borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.08)', fill: true,
+          tension: 0.3, pointRadius: 4, pointHoverRadius: 7, pointBackgroundColor: '#22c55e',
+        },
+      ],
+    },
+    options: {
+      responsive:          true,
+      maintainAspectRatio: false,
+      animation:           { duration: 400 },
+      interaction:         { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          type: 'linear',
+          min:  minTs - pad,
+          max:  maxTs + pad,
+          ticks: {
+            color: '#64748b',
+            maxTicksLimit: 10,
+            callback: v => new Date(v).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+          },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+        },
+        y: {
+          type:  'linear',
+          min:   Math.floor(vMin - vPad),
+          max:   Math.ceil(vMax + vPad),
+          title: { display: true, text: 'Gewicht (kg)', color: '#22c55e', font: { size: 11 } },
+          ticks: { color: '#94a3b8' },
+          grid:  { color: 'rgba(255,255,255,0.05)' },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(20,25,41,0.95)',
+          borderColor:     'rgba(42,52,80,0.8)',
+          borderWidth:     1,
+          titleColor:      '#e2e8f0',
+          bodyColor:       '#94a3b8',
+          callbacks: {
+            title: items => items.length ? new Date(items[0].parsed.x).toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' }) : '',
+            label: item => `Gewicht: ${item.parsed.y.toFixed(1)} kg`,
+            afterBody: items => {
+              if (!items.length) return [];
+              const entry = sorted[items[0].dataIndex];
+              return entry && entry.note ? ['📝 ' + entry.note] : [];
+            },
+          },
+        },
+      },
+    },
+    plugins: [eventLinePlugin],
+  });
+
+  renderWeightLegend(sorted);
+}
+
+function renderWeightLegend(sorted) {
+  const first = sorted[0];
+  const last  = sorted[sorted.length - 1];
+  const delta = last.kg - first.kg;
+  const deltaPct = first.kg ? (delta / first.kg) * 100 : 0;
+  const sign = delta > 0 ? '+' : '';
+  document.getElementById('chart-legend').innerHTML = `
+    <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div><span style="color:#22c55e">Gewicht (kg)</span></div>
+    <div class="legend-item"><span style="color:var(--muted);">Aktuell ${last.kg.toFixed(1)} kg (${fmtDE(last.date)}) · ${sign}${delta.toFixed(1)} kg (${sign}${deltaPct.toFixed(1)} %) seit ${fmtDE(first.date)}</span></div>
+  `;
+}
+
+// Zeigt das zum aktiven Tab passende Chart. Strahlenbelastung/Therapie-
+// Ereignisse zeigen das Chart eines Moduls mit contextChart als Kontext, ohne
+// ein solches das Strahlungs-Chart.
+const CORE_CHARTS = {
+  bp:     { title: 'Blutdruckverlauf', build: () => buildBpChart() },
+  qt:     { title: 'QT-Verlauf',       build: () => buildQtChart() },
+  weight: { title: 'Gewichtsverlauf',  build: () => buildWeightChart() },
+};
+function renderChartForActiveTab() {
+  const activeTab = document.querySelector('.tab.active');
+  const tabName = activeTab ? activeTab.dataset.tab : '';
+  const mod = moduleById(tabName) || ((tabName === 'radiation' || tabName === 'events') && DATA_MODULES.find(m => m.data.contextChart));
+  const core = CORE_CHARTS[tabName];
+  document.getElementById('chart-panel-title').textContent =
+    core ? core.title : (moduleById(tabName) && mod.data.chartTitle) || 'Verlauf';
+  resetChartPanel();
+  if (core) core.build();
+  else if (mod && mod.data.buildChart) mod.data.buildChart();
+  else buildRadiationChart();
+}
+
+// ── TABLES ────────────────────────────────────────────────────────────────────
+
+function renderRadTable() {
+  const tbody = document.getElementById('rad-tbody');
+  const dates = Object.keys(radiationData).sort();
+  if (!dates.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Keine Einträge</td></tr>';
+    return;
+  }
+  const total = dates.reduce((sum, d) => sum + (radiationData[d].dose || 0), 0);
+  tbody.innerHTML = dates.map(d => {
+    const r = radiationData[d];
+    return `<tr>
+      <td class="td-date">${fmtDE(d)}</td>
+      <td class="td-val" style="white-space:normal;word-break:break-word;">${escHtml(r.typ || '—')}</td>
+      <td class="td-val">${r.dose} mSv</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteRad('${d}')">✕</button></td>
+    </tr>`;
+  }).join('') + `<tr style="border-top:1px solid var(--border);font-weight:600;">
+    <td class="td-date">Gesamt</td>
+    <td class="td-sub">${dates.length} Untersuchung${dates.length !== 1 ? 'en' : ''}</td>
+    <td class="td-val">${total.toFixed(2)} mSv</td>
+    <td></td>
+  </tr>`;
+}
+
+function renderEvtTable() {
+  const tbody = document.getElementById('evt-tbody');
+  if (!events.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Keine Einträge</td></tr>';
+    return;
+  }
+  tbody.innerHTML = events.map((e, i) => `<tr>
+    <td class="td-date">${fmtDE(e.begin)}</td>
+    <td class="td-val">${fmtDE(e.end) || '—'}</td>
+    <td class="td-val">${escHtml(e.desc)}</td>
+    <td class="td-therapy-start"><input type="checkbox" ${e.isTherapyStart ? 'checked' : ''} onchange="setTherapyStartEvent(${i})" title="Als Therapiestart markieren"></td>
+    <td><button class="btn btn-danger btn-sm" onclick="deleteEvt(${i})">✕</button></td>
+  </tr>`).join('');
+}
+
+function bpTimeLabel(time) {
+  return time === 'abends' ? 'Abends' : 'Morgens';
+}
+
+function avg(values) {
+  const valid = values.filter(v => v != null && !isNaN(v));
+  if (!valid.length) return null;
+  return valid.reduce((a, b) => a + b, 0) / valid.length;
+}
+
+function renderBpTable() {
+  const tbody = document.getElementById('bp-tbody');
+  const tfoot = document.getElementById('bp-tfoot');
+  if (!bpData.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Keine Einträge</td></tr>';
+    tfoot.innerHTML = '';
+    return;
+  }
+  tbody.innerHTML = bpData.map((b, i) => `<tr>
+    <td class="td-date">${fmtDE(b.date)}</td>
+    <td class="td-val">${bpTimeLabel(b.time)}</td>
+    <td class="td-val">${b.sys ?? '—'}</td>
+    <td class="td-val">${b.dia ?? '—'}</td>
+    <td class="td-val">${b.pulse ?? '—'}</td>
+    <td class="td-sub" title="${b.note ? escHtml(b.note) : ''}">${b.note ? escHtml(b.note) : '—'}</td>
+    <td><button class="btn btn-danger btn-sm" onclick="deleteBp(${i})">✕</button></td>
+  </tr>`).join('');
+
+  tfoot.innerHTML = ['morgens', 'abends'].map(time => {
+    const entries = bpData.filter(b => b.time === time);
+    if (!entries.length) return '';
+    const sys   = avg(entries.map(b => b.sys));
+    const dia   = avg(entries.map(b => b.dia));
+    const pulse = avg(entries.map(b => b.pulse));
+    return `<tr>
+      <td class="td-date">Ø ${bpTimeLabel(time)}</td>
+      <td class="td-sub">n=${entries.length}</td>
+      <td class="td-val">${sys   != null ? sys.toFixed(0)   : '—'}</td>
+      <td class="td-val">${dia   != null ? dia.toFixed(0)   : '—'}</td>
+      <td class="td-val">${pulse != null ? pulse.toFixed(0) : '—'}</td>
+      <td></td>
+      <td></td>
+    </tr>`;
+  }).join('');
+}
+
+// EKG.html?QT=<ms> reproduces that exact QT interval (not the 0-100 severity
+// dial — EKG.html numerically solves for the slider position, see its own
+// solvePForQT()), at the row's recorded HF/Threshold-Parameter — so this
+// link opens the animation actually matching the measurement, not just an
+// arbitrary illustrative one.
+function qtAnimationLink(q) {
+  const params = new URLSearchParams();
+  if (q.hf != null) params.set('HF', q.hf);
+  params.set('QT', q.qt);
+  if (q.threshold != null) params.set('THR', q.threshold);
+  params.set('AUTO', '1');
+  return `EKG.html?${params.toString()}`;
+}
+
+function renderQtTable() {
+  const tbody = document.getElementById('qt-tbody');
+  if (!qtData.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="13">Keine Einträge</td></tr>';
+    return;
+  }
+  // Baseline = früheste Messung — ΔQTc zeigt die Veränderung seitdem
+  // (klinisch die eigentliche Kenngröße, siehe Hinweistext im Tab).
+  const sorted = [...qtData].sort((a, b) => a.date.localeCompare(b.date));
+  const baselineQtcB = qtcBazett(sorted[0].qt, sorted[0].rr);
+
+  tbody.innerHTML = sorted.map(q => {
+    const qtcB = qtcBazett(q.qt, q.rr);
+    const qtcF = qtcFridericia(q.qt, q.rr);
+    const delta = qtcB - baselineQtcB;
+    const status = classifyQtStatus(qtcB, delta);
+    const i = qtData.indexOf(q);
+    return `<tr>
+      <td class="td-date">${fmtDE(q.date)}</td>
+      <td class="td-val">${q.hf ?? '—'}</td>
+      <td class="td-val">${q.qt}</td>
+      <td class="td-val">${qtcB.toFixed(0)}</td>
+      <td class="td-val">${qtcF.toFixed(0)}</td>
+      <td class="td-val">${(delta >= 0 ? '+' : '') + delta.toFixed(0)} ms</td>
+      <td class="td-val"><span class="evt-badge" style="color:${QT_STATUS_COLORS[status.level]};">${QT_STATUS_ICONS[status.level]} ${status.text}</span></td>
+      <td class="td-val">${q.rr}</td>
+      <td class="td-val">${q.diff != null ? (q.diff >= 0 ? '+' : '') + q.diff + ' ms' : '—'}</td>
+      <td class="td-val">${q.threshold != null ? q.threshold + ' %' : '—'}</td>
+      <td class="td-sub" title="${q.note ? escHtml(q.note) : ''}">${q.note ? escHtml(q.note) : '—'}</td>
+      <td><a href="${qtAnimationLink(q)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="text-decoration:none;" title="Animation mit diesen Werten ansehen">▶</a></td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteQt(${i})">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function fmtKgDelta(d) {
+  if (d == null) return '—';
+  return (d > 0 ? '+' : '') + d.toFixed(1) + ' kg';
+}
+
+function renderWeightTable() {
+  const tbody = document.getElementById('weight-tbody');
+  if (!weightData.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Keine Einträge</td></tr>';
+    return;
+  }
+  const baseline = weightData[0].kg;
+  tbody.innerHTML = weightData.map((w, i) => `<tr>
+    <td class="td-date">${fmtDE(w.date)}</td>
+    <td class="td-val">${w.kg.toFixed(1)}</td>
+    <td class="td-val">${i > 0 ? fmtKgDelta(w.kg - weightData[i - 1].kg) : '—'}</td>
+    <td class="td-val">${i > 0 ? fmtKgDelta(w.kg - baseline) : '—'}</td>
+    <td class="td-sub" title="${w.note ? escHtml(w.note) : ''}">${w.note ? escHtml(w.note) : '—'}</td>
+    <td><button class="btn btn-danger btn-sm" onclick="deleteWeight(${i})">✕</button></td>
+  </tr>`).join('');
+}
+
+function renderAll() {
+  renderRadTable();
+  renderEvtTable();
+  renderBpTable();
+  renderQtTable();
+  renderWeightTable();
+  DATA_MODULES.forEach(m => { if (m.data.renderTable) m.data.renderTable(); });
+  renderChartForActiveTab();
+}
+
+// ── MUTATIONS ─────────────────────────────────────────────────────────────────
+
+window.deleteRad = function(date) {
+  if (!confirmDelete(`Strahlung ${fmtDE(date)}`)) return;
+  markDeleted(TOMB.rad(date));
+  delete radiationData[date];
+  saveAll();
+  renderAll();
+};
+
+window.deleteEvt = function(i) {
+  if (!confirmDelete(`Ereignis ${fmtDE(events[i].begin)} ${events[i].desc}`)) return;
+  markDeleted(TOMB.evt(events[i]));
+  events.splice(i, 1);
+  saveAll();
+  renderAll();
+};
+
+// Exactly one event can be "Therapiestart" at a time — checking one
+// unchecks any other, so findTherapyStartEvent() below always has a single
+// unambiguous answer.
+window.setTherapyStartEvent = function(i) {
+  const checked = events[i].isTherapyStart;
+  events.forEach(e => { delete e.isTherapyStart; });
+  if (!checked) events[i].isTherapyStart = true;
+  saveAll();
+  renderAll();
+};
+
+window.deleteBp = function(i) {
+  if (!confirmDelete(`Blutdruck ${fmtDE(bpData[i].date)} ${bpData[i].time}`)) return;
+  markDeleted(TOMB.bp(bpData[i]));
+  bpData.splice(i, 1);
+  saveAll();
+  renderAll();
+};
+
+window.deleteQt = function(i) {
+  if (!confirmDelete(`QT-Messung ${fmtDE(qtData[i].date)}`)) return;
+  markDeleted(TOMB.qt(qtData[i]));
+  qtData.splice(i, 1);
+  saveAll();
+  renderAll();
+};
+
+window.deleteWeight = function(i) {
+  if (!confirmDelete(`Gewicht ${fmtDE(weightData[i].date)}`)) return;
+  markDeleted(TOMB.weight(weightData[i]));
+  weightData.splice(i, 1);
+  saveAll();
+  renderAll();
+};
+
+// ── ADD HANDLERS ──────────────────────────────────────────────────────────────
+
+document.getElementById('btn-add-rad').addEventListener('click', () => {
+  const date = document.getElementById('rad-date').value;
+  const typ  = document.getElementById('rad-typ').value.trim();
+  const dose = parseFloat(document.getElementById('rad-dose').value);
+
+  if (!date)     { alert('Bitte ein Datum eingeben.'); return; }
+  if (!typ)      { alert('Bitte den Untersuchungstyp eingeben.'); return; }
+  if (isNaN(dose)) { alert('Bitte eine gültige Dosis eingeben.'); return; }
+
+  radiationData[date] = { typ, dose };
+  saveAll();
+  renderAll();
+
+  document.getElementById('rad-typ').value  = '';
+  document.getElementById('rad-dose').value = '';
+});
+
+document.getElementById('btn-add-evt').addEventListener('click', () => {
+  const begin = document.getElementById('evt-begin').value;
+  const end   = document.getElementById('evt-end').value;
+  const desc  = document.getElementById('evt-desc').value.trim();
+  const isTherapyStart = document.getElementById('evt-therapy-start').checked;
+
+  if (!begin) { alert('Bitte ein Startdatum eingeben.'); return; }
+  if (!desc)  { alert('Bitte eine Beschreibung eingeben.'); return; }
+
+  if (isTherapyStart) events.forEach(e => { delete e.isTherapyStart; });
+  const newEvent = { begin, end: end || '', desc };
+  if (isTherapyStart) newEvent.isTherapyStart = true;
+  events.push(newEvent);
+  events.sort((a, b) => a.begin.localeCompare(b.begin));
+  saveAll();
+  renderAll();
+
+  document.getElementById('evt-begin').value = '';
+  document.getElementById('evt-end').value   = '';
+  document.getElementById('evt-desc').value  = '';
+  document.getElementById('evt-therapy-start').checked = false;
+});
+
+document.querySelectorAll('#bp-time .toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#bp-time .toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('bp-time').dataset.value = btn.dataset.value;
+  });
+});
+
+document.getElementById('btn-add-bp').addEventListener('click', () => {
+  const date  = document.getElementById('bp-date').value;
+  const time  = document.getElementById('bp-time').dataset.value;
+  const sysRaw = document.getElementById('bp-sys').value;
+  const diaRaw = document.getElementById('bp-dia').value;
+  const pulseRaw = document.getElementById('bp-pulse').value;
+  const noteRaw  = document.getElementById('bp-note').value.trim();
+  const sys   = parseFloat(sysRaw);
+  const dia   = parseFloat(diaRaw);
+  const pulse = pulseRaw === '' ? null : parseFloat(pulseRaw);
+
+  if (!date) { alert('Bitte ein Datum eingeben.'); return; }
+  if (isNaN(sys) || isNaN(dia)) { alert('Bitte systolischen und diastolischen Wert eingeben.'); return; }
+
+  bpData.push({ date, time, sys, dia, pulse: (pulse != null && !isNaN(pulse)) ? pulse : null, note: noteRaw || null });
+  // Chronologisch: gleiches Datum -> morgens vor abends.
+  bpData.sort((a, b) => a.date.localeCompare(b.date) || (a.time === b.time ? 0 : a.time === 'abends' ? 1 : -1));
+  saveAll();
+  renderAll();
+
+  document.getElementById('bp-sys').value   = '';
+  document.getElementById('bp-dia').value   = '';
+  document.getElementById('bp-pulse').value = '';
+  document.getElementById('bp-note').value  = '';
+});
+
+document.getElementById('btn-add-weight').addEventListener('click', () => {
+  const date = document.getElementById('weight-date').value;
+  const kg   = parseFloat(document.getElementById('weight-kg').value);
+  const noteRaw = document.getElementById('weight-note').value.trim();
+
+  if (!date) { alert('Bitte ein Datum eingeben.'); return; }
+  if (isNaN(kg) || kg <= 0) { alert('Bitte ein gültiges Gewicht eingeben.'); return; }
+
+  weightData.push({ date, kg, note: noteRaw || null });
+  weightData.sort((a, b) => a.date.localeCompare(b.date));
+  saveAll();
+  renderAll();
+
+  document.getElementById('weight-kg').value   = '';
+  document.getElementById('weight-note').value = '';
+});
+
+// RR-Intervall (ms) = 60000 / HF (/min) — wird beim Eintippen der Herzfrequenz
+// vorausgefüllt, bleibt aber überschreibbar: sobald das RR-Feld manuell
+// bearbeitet wurde, überschreiben weitere HF-Änderungen es nicht mehr, bis
+// das Formular nach dem Hinzufügen wieder zurückgesetzt wird.
+let qtRrManuallyEdited = false;
+document.getElementById('qt-hf').addEventListener('input', () => {
+  if (qtRrManuallyEdited) return;
+  const hf = parseFloat(document.getElementById('qt-hf').value);
+  if (!hf || hf <= 0) return;
+  document.getElementById('qt-rr').value = Math.round(60000 / hf);
+});
+document.getElementById('qt-rr').addEventListener('input', () => {
+  qtRrManuallyEdited = true;
+});
+
+document.getElementById('btn-add-qt').addEventListener('click', () => {
+  const date = document.getElementById('qt-date').value;
+  const hfRaw = document.getElementById('qt-hf').value;
+  const qt   = parseFloat(document.getElementById('qt-qt').value);
+  const rr   = parseFloat(document.getElementById('qt-rr').value);
+  const diffRaw      = document.getElementById('qt-diff').value;
+  const thresholdRaw = document.getElementById('qt-threshold').value;
+  const noteRaw      = document.getElementById('qt-note').value.trim();
+
+  if (!date) { alert('Bitte ein Datum eingeben.'); return; }
+  if (isNaN(qt) || isNaN(rr)) { alert('Bitte QT-Intervall und RR-Intervall eingeben (Basis für QTc).'); return; }
+
+  qtData.push({
+    date,
+    hf:        hfRaw === ''        ? null : parseFloat(hfRaw),
+    qt, rr,
+    diff:      diffRaw === ''      ? null : parseFloat(diffRaw),
+    threshold: thresholdRaw === '' ? null : parseFloat(thresholdRaw),
+    note:      noteRaw || null,
+  });
+  qtData.sort((a, b) => a.date.localeCompare(b.date));
+  saveAll();
+  renderAll();
+
+  document.getElementById('qt-hf').value        = '';
+  document.getElementById('qt-qt').value        = '';
+  document.getElementById('qt-rr').value        = '';
+  document.getElementById('qt-diff').value      = '';
+  document.getElementById('qt-threshold').value = '';
+  document.getElementById('qt-note').value      = '';
+  qtRrManuallyEdited = false;
+});
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+// Module-Tabs einsetzen (nach data.tab.order), ausgeblendete Tabs
+// (config-user.js → hiddenTabs) entfernen, ersten Tab aktivieren.
+(function mountTabs() {
+  const tabsEl = document.getElementById('tabs');
+  const panelHost = tabsEl.parentElement;
+  const styles = [];
+  DATA_MODULES.forEach(m => {
+    const d = m.data;
+    const tab = document.createElement('div');
+    tab.className = 'tab';
+    tab.dataset.tab = d.tab.id;
+    tab.dataset.order = d.tab.order != null ? d.tab.order : 100;
+    tab.textContent = d.tab.label;
+    tabsEl.appendChild(tab);
+    const panel = document.createElement('div');
+    panel.className = 'tab-panel';
+    panel.id = 'tab-' + d.tab.id;
+    panel.innerHTML = d.panelHtml || '';
+    panelHost.appendChild(panel);
+    if (d.css) styles.push(d.css);
+    if (d.extraHtml) document.body.insertAdjacentHTML('beforeend', d.extraHtml);
+    if (d.chartBelowHtml) document.getElementById('chart-below-slot').insertAdjacentHTML('beforeend', d.chartBelowHtml);
+    if (d.chartSideHtml) document.getElementById('chart-side-slot').insertAdjacentHTML('beforeend', d.chartSideHtml);
+    if (d.chartDetailHtml) document.getElementById('chart-detail-slot').insertAdjacentHTML('beforeend', d.chartDetailHtml);
+  });
+  if (styles.length) {
+    const st = document.createElement('style');
+    st.textContent = styles.join('\n');
+    document.head.appendChild(st);
+  }
+  [...tabsEl.querySelectorAll('.tab')].forEach(t => {
+    // Nur der Reiter verschwindet; das Panel bleibt (unsichtbar) im DOM, damit
+    // render*Table() und die Formular-Handler weiterhin ihre Elemente finden.
+    if (!moduleById(t.dataset.tab) && !window.APP_CONFIG.isTabEnabled(t.dataset.tab)) t.remove();
+  });
+  [...tabsEl.querySelectorAll('.tab')]
+    .sort((a, b) => Number(a.dataset.order) - Number(b.dataset.order))
+    .forEach(t => tabsEl.appendChild(t));
+  const first = tabsEl.querySelector('.tab');
+  if (first) {
+    first.classList.add('active');
+    document.getElementById('tab-' + first.dataset.tab).classList.add('active');
+  }
+  const labels = [...tabsEl.querySelectorAll('.tab')].map(t => t.textContent);
+  document.getElementById('page-subtitle').textContent = labels.join(', ');
+})();
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    refreshDateDefaults();
+    renderChartForActiveTab();
+  });
+});
+
+// ── EXPORT / IMPORT ───────────────────────────────────────────────────────────
+
+document.getElementById('btn-export').addEventListener('click', () => {
+  const payload = { radiationData, events, bpData, qtData, weightData };
+  DATA_MODULES.forEach(m => { if (m.data.exportPage) Object.assign(payload, m.data.exportPage()); });
+  const blob    = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  a.href        = url;
+  a.download    = `medizinische-daten-${isoToday()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000); // immediate revoke can cancel the download in Safari
+});
+
+document.getElementById('btn-import').addEventListener('click', () => {
+  document.getElementById('import-input').click();
+});
+
+document.getElementById('import-input').addEventListener('change', async (evt) => {
+  const file = evt.target.files[0];
+  if (!file) return;
+  evt.target.value = '';
+  let payload;
+  try { payload = JSON.parse(await file.text()); } catch { alert('Ungültige JSON-Datei.'); return; }
+  if (payload.radiationData) radiationData = payload.radiationData;
+  if (Array.isArray(payload.events)) events = payload.events;
+  if (Array.isArray(payload.bpData)) bpData = payload.bpData;
+  if (Array.isArray(payload.qtData)) qtData = payload.qtData;
+  if (Array.isArray(payload.weightData)) weightData = payload.weightData;
+  DATA_MODULES.forEach(m => { if (m.data.importPage) m.data.importPage(payload); });
+  await saveAll();
+  renderAll();
+});
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+
+(async () => {
+  await loadAll();
+  // Pre-fill date fields with today (see refreshDateDefaults() above, which
+  // keeps these current if the tab is switched or the page re-shown later)
+  dateInputIds().forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = lastKnownToday;
+  });
+  DATA_MODULES.forEach(m => { if (m.data.init) m.data.init(); });
+  renderAll();
+})();
+</script>
+<script src="update.js"></script>
+<script src="save-file.js"></script>
+<script src="bulk-import.js"></script>
+</body>
+</html>

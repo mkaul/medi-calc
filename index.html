@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="de" translate="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>MediCalc</title>
+  <meta name="description" content="MediCalc – Blutbild, Medikations-Plan, Zeitreihen, MediCalc, Spinnennetz und Befund: sechs clientseitige Gesundheits-Tools, offline-fähig.">
+
+  <!-- PWA / Web App Manifest -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="shortcut icon" href="favicon.ico">
+
+  <!-- iOS Safari Home Screen -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MediCalc">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="apple-touch-icon-precomposed" href="apple-touch-icon-precomposed.png">
+
+  <!-- Theme colour (Android Chrome address bar) -->
+  <meta name="theme-color" content="#0b0f19">
+
+  <!-- Tells the browser up front that this page is dark-only, so it paints
+       the initial canvas background dark from the very first frame instead
+       of its default white (see the same fix on blutbild.html). -->
+  <meta name="color-scheme" content="dark">
+
+  <!-- Warm up the DNS/TLS connection for the CDN hosts used by the OCR app
+       (blutbild.html) — cheap, static, and starts immediately in parallel
+       with everything else, so the actual prefetches kicked off later in
+       the idle-time script below land faster. -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+
+  <!-- Entire page is inline CSS on purpose: this is the very first screen a
+       user sees (PWA start_url), so it must never depend on an external
+       stylesheet finishing a network round-trip before it can paint
+       correctly — no FOUC, no boot loader needed here. -->
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: #0b0f19;
+      height: 100%;
+    }
+
+    body {
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: max(1.5rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #f3f4f6;
+      background-color: #0b0f19;
+      background-image:
+        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.15) 0px, transparent 50%);
+      background-attachment: fixed;
+    }
+
+    /* Vertically centers .page when it fits the viewport, same as the old
+       body { justify-content: center } — but margin:auto degrades safely to
+       top-aligned + scrollable when content is taller than the viewport
+       (e.g. 6 app tiles on a short window), instead of flexbox's default
+       "unsafe" centering, which overflows equally above AND below and makes
+       the header unreachable by scrolling off the top of the page. */
+    .page {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: clamp(1.5rem, 5vh, 3rem);
+      width: 100%;
+      margin: auto 0;
+    }
+
+    header {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      position: relative;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    /* header-menu.js injects its own `header { padding-right: ...; }` rule
+       (to reserve room for the ☰ button on pages with a left-aligned
+       title) after this stylesheet, so it would otherwise win the cascade
+       and knock this centered hero title off-center. The button itself is
+       absolutely positioned regardless, so no padding is actually needed
+       here. !important is intentional: it must outrank a rule injected
+       later, at runtime, by a shared script this page doesn't control. */
+    header { padding-right: 0 !important; }
+
+    h1 {
+      font-size: clamp(2rem, 8vw, 2.75rem);
+      font-weight: 700;
+      background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      color: #9ca3af;
+      font-size: 0.95rem;
+      max-width: 34ch;
+    }
+
+    .version-line {
+      color: #6b7280;
+      font-size: 0.8rem;
+    }
+
+    .app-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    /* Wide screens (desktop): 2 rows of 3 instead of 3 rows of 2 — the
+       6 tiles read as one balanced block instead of a tall, narrow column. */
+    @media (min-width: 640px) {
+      .app-grid {
+        grid-template-columns: repeat(3, 1fr);
+        max-width: 660px;
+      }
+    }
+
+    .app-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      aspect-ratio: 1;
+      padding: 1rem;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(17, 24, 39, 0.55);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      color: #f3f4f6;
+      text-decoration: none;
+      font-size: 1rem;
+      font-weight: 600;
+      text-align: center;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+    }
+    .app-tile:active {
+      transform: scale(0.96);
+      background: rgba(59, 130, 246, 0.12);
+      border-color: rgba(59, 130, 246, 0.35);
+    }
+    .app-tile .icon {
+      font-size: clamp(2.2rem, 9vw, 2.8rem);
+      line-height: 1;
+    }
+
+    footer {
+      color: #6b7280;
+      font-size: 0.75rem;
+      text-align: center;
+    }
+  </style>
+  <!-- Konfiguration: öffentlich (config-system.js) + persönlich (config-user.js,
+       optional, nicht im Repository) → APP_CONFIG; lädt auch private Module. -->
+  <script src="config-system.js"></script>
+  <script src="config-user.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+
+  <div class="page">
+    <header>
+      <div id="hbm-root"></div>
+      <h1>MediCalc</h1>
+      <p class="subtitle">Clientseitige Gesundheits-Tools. Wähle eine App:</p>
+      <p class="version-line" id="start-version"></p>
+    </header>
+
+    <nav class="app-grid" aria-label="App-Auswahl" id="app-grid"></nav>
+    <!-- Kacheln aus der Konfiguration (config-system.js → pages, ohne
+         config-user.js → hiddenPages). -->
+    <script>
+      (function () {
+        const grid = document.getElementById('app-grid');
+        const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        grid.innerHTML = window.APP_CONFIG.pages.map(p =>
+          `<a class="app-tile" href="${esc(p.href)}"><span class="icon" aria-hidden="true">${esc(p.icon || '')}</span>${esc(p.label)}</a>`
+        ).join('');
+      })();
+    </script>
+
+    <footer>
+      <p>Stand-alone Client-side Tools &bull; Läuft vollständig offline</p>
+    </footer>
+  </div>
+
+  <!-- Service Worker registration. Registering it here — the PWA's
+       start_url / first screen — means the offline shell (all six apps,
+       shared scripts, icons) starts precaching the moment this page opens,
+       well before the user has picked which app to open. See sw.js for the
+       precache list and update.js for the manual update flow. -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
+    }
+  </script>
+
+  <script src="header-menu.js"></script>
+  <script>createHeaderMenu({ current: 'start' });</script>
+  <script src="update.js"></script>
+  <script src="save-file.js"></script>
+  <script src="bulk-import.js"></script>
+
+  <!-- Own id (not #app-version — header-menu.js already uses that one
+       inside the hamburger panel, and ids must stay unique per document). -->
+  <script>
+    fetch('manifest.json')
+      .then(r => r.json())
+      .then(m => {
+        const el = document.getElementById('start-version');
+        if (el && m.version) el.textContent = 'v' + m.version;
+      })
+      .catch(() => {});
+  </script>
+
+  <!-- Background preloading: while the user is still looking at this
+       button screen, warm up the resources the OCR app (blutbild.html)
+       needs but that the service worker's install-time precache doesn't
+       cover — the large third-party CDN scripts it loads at startup
+       (OpenCV.js, clipper-lib, Chart.js, the PaddleOCR import-map modules).
+       Deferred to requestIdleCallback (with a setTimeout fallback) so it
+       never competes with this page's own first paint or interactivity;
+       plain <link rel="prefetch"> tags let the browser fetch them in the
+       background at low priority. -->
+  <script>
+    (function () {
+      function prefetch(href, as) {
+        var link = document.createElement('link');
+        link.rel = 'prefetch';
+        link.href = href;
+        if (as) link.as = as;
+        // Same request mode as the real load later: jsDelivr scripts are
+        // loaded with crossorigin="anonymous" or as ES modules (CORS). A
+        // no-cors prefetch would put an opaque copy into sw.js's CDN cache.
+        if (href.indexOf('https://cdn.jsdelivr.net/') === 0) link.crossOrigin = 'anonymous';
+        document.head.appendChild(link);
+      }
+
+      function warmUp() {
+        // The other five same-origin pages (harmless no-op once the
+        // service worker has finished its own precache; helps on the very
+        // first visit before that install completes).
+        ['blutbild.html', 'plan.html', 'data.html', 'medicalc.html', 'radar.html', 'befund.html'].forEach(function (page) {
+          prefetch(page, 'document');
+        });
+
+        // Heavy third-party CDN dependencies used by blutbild.html.
+        var cdnUrls = [
+          'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.5.2-release.1/dist/opencv.js',
+          'https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js',
+          'https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js',
+          'https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/+esm',
+          'https://cdn.jsdelivr.net/npm/yaml@2.3.0/+esm',
+          'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.bundle.min.mjs',
+        ];
+        // <link rel=prefetch> to another host bypasses the service worker
+        // in Chrome: it only warmed the HTTP cache and competed with
+        // blutbild.html's own download of the same 8 MB opencv.js (a
+        // transient 503 from the CDN then surfaced as a console error).
+        // A plain fetch() goes THROUGH the service worker instead: it lands
+        // directly in the offline CDN cache, shares one download with
+        // blutbild.html, and gets sw.js's retry on server errors. Same
+        // request mode as the real load (crossorigin="anonymous" / modules
+        // = CORS). The body isn't needed here — sw.js caches it completely.
+        function warmCdn() {
+          cdnUrls.forEach(function (url) { fetch(url, { mode: 'cors' }).catch(function () {}); });
+        }
+        if (!('serviceWorker' in navigator)) {
+          cdnUrls.forEach(function (url) { prefetch(url, 'script'); });
+        } else if (navigator.serviceWorker.controller) {
+          warmCdn();
+        } else {
+          // First visit: the worker is still installing. Wait until it has
+          // taken over this page (clients.claim() in sw.js), then warm up
+          // through it — a prefetch now would download everything twice.
+          navigator.serviceWorker.addEventListener('controllerchange', function onControl() {
+            navigator.serviceWorker.removeEventListener('controllerchange', onControl);
+            warmCdn();
+          });
+        }
+      }
+
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(warmUp, { timeout: 3000 });
+      } else {
+        setTimeout(warmUp, 1000);
+      }
+    })();
+  </script>
+</body>
+</html>

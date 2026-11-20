@@ -1,0 +1,1861 @@
+<!DOCTYPE html>
+<html lang="de" translate="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>MediCalc</title>
+  <meta name="description" content="Arzt- und Medikamentenkosten, Beihilfe- und PKV-Erstattung – vollständig clientseitig, offline-fähig.">
+  <style>
+    :root {
+      --bg:        #0b0f19;
+      --surface:   #141929;
+      --card:      #1a2235;
+      --border:    #2a3450;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --accent:    #4f9cf9;
+      --green:     #22c55e;
+      --orange:    #f59e0b;
+      --red:       #ef4444;
+      --purple:    #a78bfa;
+      --indigo:    #6366f1;
+      --green-bg:  #052e16;
+      --orange-bg: #451a03;
+      --red-bg:    #450a0a;
+      --blue-bg:   #0c1a33;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      background-image:
+        radial-gradient(at 0% 0%, rgba(79,156,249,0.10) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(99,102,241,0.10) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Boot loader ───────────────────────────────────────────────── */
+    #boot-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      background: var(--bg);
+      color: var(--muted);
+      transition: opacity 0.25s ease;
+    }
+    #boot-loader.boot-loader-hidden { opacity: 0; pointer-events: none; }
+    #boot-loader-spinner {
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 50%;
+      border: 3px solid rgba(203, 213, 225, 0.2);
+      border-top-color: var(--accent);
+      animation: boot-loader-spin 0.8s linear infinite;
+    }
+    #boot-loader-status { font-size: 0.9rem; text-align: center; padding: 0 1.5rem; }
+    @keyframes boot-loader-spin { to { transform: rotate(360deg); } }
+
+    /* ── Header ────────────────────────────────────────────────────── */
+    header {
+      padding: 1rem 1.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    header h1 { font-size: 1.25rem; color: var(--accent); }
+    header p  { color: var(--muted); font-size: 0.82rem; flex: 1; }
+    .app-version { font-size: 0.72rem; font-weight: 500; color: var(--muted); opacity: 0.8; margin-left: 0.3rem; vertical-align: middle; }
+
+
+    /* ── Toolbar ───────────────────────────────────────────────────── */
+    .toolbar {
+      padding: 0.65rem 1.5rem;
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+    }
+
+    /* ── Buttons ───────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.45rem 0.9rem; border-radius: 6px; border: none;
+      cursor: pointer; font-size: 0.82rem; font-weight: 500;
+      transition: opacity 0.15s, background 0.15s;
+      font-family: inherit;
+    }
+    .btn:hover { opacity: 0.82; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-outline { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-outline:hover { color: var(--text); border-color: var(--accent); opacity: 1; }
+    .btn-danger  { background: transparent; color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+    .btn-danger:hover  { background: rgba(239,68,68,0.1); opacity: 1; }
+
+    /* ── Tab bar ───────────────────────────────────────────────────── */
+    .tabbar {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      padding: 0.65rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.78rem;
+      cursor: pointer;
+      font-family: inherit;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+
+    /* Status-Tabs farblich konsistent mit den Badges in der Liste:
+       Rot = noch nicht eingereicht, Gelb = eingereicht aber noch nicht erstattet. */
+    .tab-btn.tab-red    { color: var(--red);    border-color: rgba(239, 68, 68, 0.35); }
+    .tab-btn.tab-red:hover    { color: var(--red);    border-color: var(--red); }
+    .tab-btn.tab-red.active   { color: #fff;  background: var(--red);    border-color: var(--red); }
+    .tab-btn.tab-yellow { color: var(--orange); border-color: rgba(245, 158, 11, 0.35); }
+    .tab-btn.tab-yellow:hover { color: var(--orange); border-color: var(--orange); }
+    .tab-btn.tab-yellow.active { color: var(--bg); background: var(--orange); border-color: var(--orange); }
+
+    main { padding: 1rem 1.5rem 3rem; max-width: 980px; margin: 0 auto; }
+
+    .empty-hint {
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-align: center;
+      padding: 2.5rem 1rem;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+    }
+
+    /* Sum banner above the Alle/Unbezahlt/Offen lists — reuses .stat-card,
+       just anchored to the top of the list instead of living in a
+       stat-grid. Underlined value so the sum stands out from the regular
+       (not underlined) stat-value used in the Summen/Jahre tabs. */
+    .list-sum-card { margin-bottom: 0.75rem; }
+    .list-sum-value { text-decoration: underline; text-underline-offset: 3px; }
+    .list-sum-extra { font-weight: 400; text-decoration: none; }
+
+    /* ── Invoice rows ──────────────────────────────────────────────── */
+    .inv-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.6rem;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      flex-wrap: wrap;
+    }
+    .inv-row:hover { border-color: var(--accent); }
+    .inv-main { min-width: 0; }
+    .inv-title { font-weight: 600; font-size: 0.92rem; }
+    .inv-title-num { font-weight: 400; color: var(--muted); font-size: 0.82rem; }
+    .inv-sub   { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+    .inv-badges { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .b-active  { background: var(--green-bg);  color: var(--green); }
+    .b-pending { background: var(--orange-bg); color: var(--orange); }
+    .b-open    { background: var(--red-bg);    color: var(--red); }
+
+    /* ── Stat grid (Summen) ───────────────────────────────────────── */
+    .totals-toolbar { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; font-size: 0.85rem; }
+    .totals-toolbar select {
+      background: var(--surface); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 0.35rem 0.6rem; font-family: inherit; font-size: 0.82rem;
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem;
+    }
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.9rem 1rem;
+    }
+    .stat-label { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-value { font-size: 1.35rem; font-weight: 700; margin-top: 0.25rem; }
+
+    /* ── Years table ───────────────────────────────────────────────── */
+    .table-scroll { overflow-x: auto; }
+    table.years-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; min-width: 640px; }
+    table.years-table th, table.years-table td {
+      padding: 0.55rem 0.75rem;
+      text-align: right;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    table.years-table th:first-child, table.years-table td:first-child { text-align: left; }
+    table.years-table th {
+      color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+
+    /* ── Config form ───────────────────────────────────────────────── */
+    .config-form { max-width: 420px; }
+    .form-section-title {
+      font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--accent); margin: 1.1rem 0 0.5rem; font-weight: 700;
+    }
+    .form-section-title:first-child { margin-top: 0; }
+    .form-row { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.75rem; }
+    .form-row label { font-size: 0.78rem; color: var(--muted); }
+    .form-row input[type="text"],
+    .form-row input[type="date"],
+    .form-row input[type="number"] {
+      background: var(--surface); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 0.5rem 0.65rem; font-family: inherit; font-size: 0.88rem;
+      width: 100%;
+    }
+    .form-row input:focus { outline: none; border-color: var(--accent); }
+    .form-row select {
+      background: var(--surface); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 0.5rem 0.65rem; font-family: inherit; font-size: 0.85rem;
+      width: 100%;
+    }
+    .form-row select:focus { outline: none; border-color: var(--accent); }
+    .schema-mapping-grid { display: flex; flex-direction: column; gap: 0.6rem; margin: 1rem 0; }
+    .schema-mapping-row { display: grid; grid-template-columns: minmax(130px, 40%) 1fr; align-items: center; gap: 0.6rem; }
+    .schema-mapping-row label { font-size: 0.8rem; color: var(--text); }
+    .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .checkbox-row { flex-direction: row; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    .checkbox-row label { display: flex; align-items: center; gap: 0.4rem; color: var(--text); font-size: 0.85rem; white-space: nowrap; }
+    .form-hint {
+      font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem;
+      display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+    }
+    .btn-hint-apply {
+      background: transparent; border: 1px dashed var(--accent); color: var(--accent);
+      border-radius: 4px; padding: 0.1rem 0.5rem; font-size: 0.68rem; cursor: pointer; font-family: inherit;
+    }
+    .form-actions { display: flex; gap: 0.6rem; margin-top: 1.25rem; flex-wrap: wrap; }
+
+    /* ── Modal ─────────────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 500;
+      background: rgba(5, 8, 15, 0.7);
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 2rem 1rem; overflow-y: auto;
+    }
+    .modal-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.4rem 1.5rem;
+      max-width: 480px; width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; gap: 1rem; }
+    .modal-header h2 { font-size: 1.05rem; color: var(--text); word-break: break-word; }
+    .btn-close {
+      background: transparent; border: none; color: var(--muted); font-size: 1.1rem;
+      cursor: pointer; line-height: 1; padding: 0.2rem 0.4rem; flex-shrink: 0;
+    }
+    .btn-close:hover { color: var(--text); }
+    .detail-grid { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 1.25rem; }
+    .detail-grid > div { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+    .detail-label { color: var(--muted); }
+
+    /* Bemerkungen: collapsed to a single unobtrusive line when there's
+       nothing to show; expands into a comfortable textarea on demand. */
+    .notes-details { margin-bottom: 1.25rem; }
+    .notes-summary {
+      cursor: pointer;
+      font-size: 0.8rem;
+      color: var(--muted);
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      user-select: none;
+    }
+    .notes-summary::-webkit-details-marker { display: none; }
+    .notes-summary::before { content: '▸'; font-size: 0.7rem; transition: transform 0.15s; }
+    .notes-details[open] > .notes-summary::before { transform: rotate(90deg); }
+    .notes-details[open] > .notes-summary { color: var(--text); margin-bottom: 0.5rem; }
+    .notes-textarea {
+      width: 100%;
+      min-height: 90px;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 0.7rem;
+      font-family: inherit;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      resize: vertical;
+    }
+    .notes-textarea:focus { outline: none; border-color: var(--accent); }
+
+    .modal-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+    /* ── Toast ─────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 1.25rem; left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 0.6rem 1.1rem; border-radius: 8px; font-size: 0.82rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 10001; max-width: 90vw; text-align: center;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 640px) {
+      header { padding: 0.75rem 1rem 0.6rem; }
+      .toolbar, .tabbar { padding: 0.6rem 1rem; }
+      main { padding: 0.85rem 0.85rem 2.5rem; }
+      .form-row-2 { grid-template-columns: 1fr; }
+      .inv-row { flex-direction: column; align-items: flex-start; }
+      .modal-card { padding: 1rem; }
+    }
+  </style>
+  <!-- Konfiguration: öffentlich (config-system.js) + persönlich (config-user.js,
+       optional, nicht im Repository) → APP_CONFIG; lädt auch private Module. -->
+  <script src="config-system.js"></script>
+  <script src="config-user.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+
+  <!-- Boot loader: instant sign of life while IndexedDB opens and the first
+       view renders, especially noticeable on a slow or offline first start. -->
+  <div id="boot-loader">
+    <div id="boot-loader-spinner"></div>
+    <div id="boot-loader-status">MediCalc wird geladen …</div>
+  </div>
+
+  <header>
+    <h1>MediCalc</h1>
+    <p>Arzt- &amp; Medikamentenkosten · Beihilfe- &amp; PKV-Erstattung</p>
+    <div id="hbm-root"></div>
+  </header>
+
+  <div class="toolbar">
+    <button class="btn btn-primary" id="btn-new">+ Neue Rechnung</button>
+  </div>
+
+  <div id="hbm-page-slot" hidden>
+    <button class="hbm-item" id="btn-export">⬇ CSV exportieren</button>
+    <button class="hbm-item" id="btn-import">⬆ CSV importieren</button>
+    <input type="file" id="import-input" accept=".csv,text/csv" style="display:none">
+    <button class="hbm-item" id="btn-clipboard-schema" title="Spaltenschema der Ziel-Tabelle in Numbers konfigurieren (für 'In Zwischenablage kopieren')">⚙ Spaltenschema konfigurieren</button>
+  </div>
+  <script src="header-menu.js"></script>
+  <script>createHeaderMenu({ current: 'medicalc' });</script>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab-btn active" data-view="all" title="Alle erfassten Rechnungen">Alle</button>
+    <button class="tab-btn tab-red" data-view="unpaid" title="Rechnungen, die noch nicht bezahlt wurden">Unbezahlt</button>
+    <button class="tab-btn tab-red" data-view="open" title="Beihilfe/PKV noch nicht eingereicht oder noch nicht erstattet">Offen</button>
+    <button class="tab-btn tab-red" data-view="beihilfe-open" title="Noch nicht bei der Beihilfe eingereicht">Beihilfe offen</button>
+    <button class="tab-btn tab-yellow" data-view="beihilfe-pending" title="Beihilfe eingereicht, aber noch nicht erstattet">Beihilfe abwarten</button>
+    <button class="tab-btn tab-red" data-view="pkv-open" title="Noch nicht bei der PKV eingereicht">PKV offen</button>
+    <button class="tab-btn tab-yellow" data-view="pkv-pending" title="PKV eingereicht, aber noch nicht erstattet">PKV abwarten</button>
+    <button class="tab-btn" data-view="totals" title="Summen für ein Jahr (oder alle Jahre): bezahlt, erstattet, Eigenanteil">Summen</button>
+    <button class="tab-btn" data-view="years" title="Zusammenfassung pro Jahr im Überblick">Jahresübersicht</button>
+    <button class="tab-btn" data-view="config" title="App-weite Parameter: Erstattungssätze und Eigenanteil-Schwelle">Konfiguration</button>
+  </nav>
+
+  <main>
+    <div id="list-view"></div>
+
+    <div id="totals-view" class="view-panel" style="display:none;">
+      <div class="totals-toolbar">
+        <label for="totals-year">Jahr:</label>
+        <select id="totals-year"></select>
+      </div>
+      <div class="stat-grid" id="totals-grid"></div>
+    </div>
+
+    <div id="years-view" class="view-panel" style="display:none;">
+      <div class="table-scroll"><table class="years-table" id="years-table"></table></div>
+    </div>
+
+    <div id="config-view" class="view-panel" style="display:none;">
+      <form class="config-form" id="config-form"></form>
+    </div>
+  </main>
+
+  <div class="modal-overlay" id="modal-overlay" style="display:none;">
+    <div class="modal-card" id="modal-card"></div>
+  </div>
+
+  <div class="modal-overlay" id="schema-modal-overlay" style="display:none;">
+    <div class="modal-card" id="schema-modal-card" style="max-width:640px;"></div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+  (function () {
+    'use strict';
+
+    // ── IndexedDB ─────────────────────────────────────────────────────────────
+    const DB_NAME = 'MediCalcDB';
+    const DB_VERSION = 1;
+    const STORE_INVOICES = 'invoices';
+    const STORE_CONFIG = 'config';
+    let _db = null;
+
+    function openDb() {
+      if (_db) return Promise.resolve(_db);
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = e => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_INVOICES)) {
+            const store = db.createObjectStore(STORE_INVOICES, { keyPath: 'id', autoIncrement: true });
+            store.createIndex('date', 'date', { unique: false });
+          }
+          if (!db.objectStoreNames.contains(STORE_CONFIG)) {
+            db.createObjectStore(STORE_CONFIG, { keyPath: 'key' });
+          }
+        };
+        req.onsuccess = e => {
+          _db = e.target.result;
+          // Let go when another tab upgrades/deletes the DB (reset) instead of blocking it.
+          _db.onversionchange = () => { _db.close(); _db = null; };
+          resolve(_db);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function dbGetAllInvoices() {
+      const db = await openDb();
+      return new Promise((resolve, reject) => {
+        const req = db.transaction(STORE_INVOICES, 'readonly').objectStore(STORE_INVOICES).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function dbPutInvoice(invoice) {
+      const db = await openDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_INVOICES, 'readwrite');
+        const req = tx.objectStore(STORE_INVOICES).put(invoice);
+        let newId;
+        req.onsuccess = () => { newId = req.result; };
+        tx.oncomplete = () => resolve(newId);
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function dbDeleteInvoice(id) {
+      const db = await openDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_INVOICES, 'readwrite');
+        tx.objectStore(STORE_INVOICES).delete(id);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function dbGetConfig() {
+      const db = await openDb();
+      return new Promise((resolve, reject) => {
+        const req = db.transaction(STORE_CONFIG, 'readonly').objectStore(STORE_CONFIG).get('settings');
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function dbPutConfig(cfg) {
+      const db = await openDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_CONFIG, 'readwrite');
+        tx.objectStore(STORE_CONFIG).put(Object.assign({ key: 'settings' }, cfg));
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    // Start values from the configuration (config-system.js → medicalc,
+    // overridden by config-user.js); editable under "Konfiguration".
+    const DEFAULT_CONFIG = (({ beihilfeRate, pkvRateLow, pkvRateHigh, eigenanteilThreshold }) =>
+      ({ beihilfeRate, pkvRateLow, pkvRateHigh, eigenanteilThreshold }))(window.APP_CONFIG.medicalc);
+    let invoices = [];
+    let config = Object.assign({}, DEFAULT_CONFIG);
+    let currentView = 'all';
+    let modalInvoiceId = null; // null = new invoice
+    let modalMode = 'view';    // 'view' | 'edit'
+    let modalDraft = null;
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    // toISOString() is UTC-based — shortly after local midnight in timezones
+    // ahead of UTC (e.g. Germany), UTC is still on the previous day, so this
+    // must use local date components instead.
+    function todayIso() {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function fmtDE(iso) {
+      if (!iso) return '–';
+      const [y, m, d] = iso.split('-');
+      return `${d}.${m}.${y}`;
+    }
+    function fmtEUR(n) {
+      if (n == null || isNaN(n)) return '–';
+      return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    }
+    function fmtPct(n) {
+      if (n == null || isNaN(n)) return '–';
+      return n.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' %';
+    }
+    function fmtDays(n) {
+      if (n == null || isNaN(n)) return 'keine Daten';
+      return n.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' Tage';
+    }
+    function sum(arr) { return arr.reduce((a, b) => a + (b || 0), 0); }
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    let toastTimeout;
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => el.classList.remove('show'), 3000);
+    }
+
+    // ── Business logic ────────────────────────────────────────────────────────
+    // Beihilfe rate is a flat percentage of the invoice amount — no dependency
+    // on other invoices.
+    function beihilfeSuggested(inv) {
+      return Math.round((inv.amount || 0) * config.beihilfeRate * 100) / 100;
+    }
+
+    // PKV pays a lower rate until the year's accumulated Eigenanteil crosses a
+    // threshold, then a higher rate for the rest of that calendar year. This
+    // walks the year's OTHER invoices in chronological (Rechnungsdatum) order,
+    // using each one's actual recorded reimbursements where present (falling
+    // back to its own suggestion when not yet reimbursed), to estimate the
+    // cumulative Eigenanteil immediately before the invoice in question. This
+    // is a best-effort planning aid, not an authoritative insurer calculation —
+    // the actually recorded amounts always take precedence in every other
+    // computation (summaries, per-invoice reimbursement totals, etc.).
+    function pkvSuggested(inv) {
+      const year = (inv.date || '').slice(0, 4);
+      if (!year || !inv.amount) return { rate: config.pkvRateLow, amount: 0, cumulativeBefore: 0 };
+      const sameYear = invoices
+        .filter(o => o.id !== inv.id && (o.date || '').slice(0, 4) === year)
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+      let cumulative = 0;
+      for (const o of sameYear) {
+        if (inv.date && o.date >= inv.date) continue; // only strictly earlier invoices count
+        const beih = o.beihilfeAmount != null ? o.beihilfeAmount : o.amount * config.beihilfeRate;
+        const rate = cumulative < config.eigenanteilThreshold ? config.pkvRateLow : config.pkvRateHigh;
+        const pkv = o.pkvAmount != null ? o.pkvAmount : o.amount * rate;
+        cumulative += Math.max(0, o.amount - beih - pkv);
+      }
+      const rate = cumulative < config.eigenanteilThreshold ? config.pkvRateLow : config.pkvRateHigh;
+      return { rate, amount: Math.round(inv.amount * rate * 100) / 100, cumulativeBefore: cumulative };
+    }
+
+    // Reimbursement totals for a single invoice, based on ACTUAL recorded
+    // amounts only (never the theoretical suggestion above).
+    function invoiceReimbursement(inv) {
+      const beih = inv.beihilfeAmount || 0;
+      const pkv = inv.pkvAmount || 0;
+      const total = beih + pkv;
+      const pct = inv.amount > 0 ? (total / inv.amount * 100) : 0;
+      const eigen = inv.amount - total;
+      const eigenPct = inv.amount > 0 ? (eigen / inv.amount * 100) : 0;
+      return { total, pct, eigen, eigenPct };
+    }
+
+    // Days between two ISO date strings (both required — caller must filter
+    // out missing dates beforehand). ISO 'YYYY-MM-DD' parses as UTC midnight
+    // in every browser, so the ms difference is an exact whole-day multiple.
+    function daysBetween(fromIso, toIso) {
+      return Math.round((new Date(toIso) - new Date(fromIso)) / 86400000);
+    }
+
+    // Average turnaround time in days between submission and reimbursement.
+    // Only invoices with BOTH dates present are counted — an invoice missing
+    // either date is simply excluded, never treated as 0 days, since that
+    // would skew the average toward "faster than reality". Negative
+    // durations (reimbursed before submitted — inconsistent data) are also
+    // excluded rather than allowed to distort the average.
+    function averageProcessingDays(list, submittedField, reimbursedField) {
+      const durations = list
+        .filter(i => i[submittedField] && i[reimbursedField])
+        .map(i => daysBetween(i[submittedField], i[reimbursedField]))
+        .filter(d => d >= 0);
+      if (durations.length === 0) return null;
+      return durations.reduce((a, b) => a + b, 0) / durations.length;
+    }
+
+    // Same as averageProcessingDays(), but split into two buckets by the
+    // total EUR amount submitted on a given day. Invoices sharing the exact
+    // same submission date count as ONE combined submission (as they'd
+    // typically be processed together in one Bescheid) — their invoice
+    // amounts are summed first, and that batch total decides whether EVERY
+    // invoice in the batch counts toward the "unter" or "über" bucket.
+    function averageProcessingDaysBySubmissionSize(list, submittedField, reimbursedField, threshold) {
+      const batches = new Map(); // submission date -> invoices submitted that day
+      list.forEach(i => {
+        const d = i[submittedField];
+        if (!d) return;
+        if (!batches.has(d)) batches.set(d, []);
+        batches.get(d).push(i);
+      });
+
+      const under = [];
+      const over = [];
+      batches.forEach(batchInvoices => {
+        const batchTotal = sum(batchInvoices.map(i => i.amount));
+        const bucket = batchTotal < threshold ? under : over;
+        batchInvoices.forEach(i => {
+          if (!i[reimbursedField]) return; // no reimbursement date yet — excluded, not 0
+          const days = daysBetween(i[submittedField], i[reimbursedField]);
+          if (days >= 0) bucket.push(days);
+        });
+      });
+
+      const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+      return { under: avg(under), over: avg(over) };
+    }
+
+    function aggregate(list) {
+      const rechnungssumme = sum(list.map(i => i.amount));
+      const bezahlt = sum(list.filter(i => i.paid).map(i => i.amount));
+      const beihilfe = sum(list.map(i => i.beihilfeAmount || 0));
+      const pkv = sum(list.map(i => i.pkvAmount || 0));
+      const erstattet = beihilfe + pkv;
+      // Eigenanteil ist nur für bereits Bezahltes definiert — was noch nicht
+      // bezahlt wurde, kann keinen (Selbst-)Anteil verursacht haben.
+      const eigenanteil = bezahlt - erstattet;
+      const eigenanteilPct = bezahlt > 0 ? (eigenanteil / bezahlt * 100) : 0;
+      const beihilfeDuration = averageProcessingDaysBySubmissionSize(list, 'beihilfeSubmitted', 'beihilfeDate', 5000);
+      const pkvDurationAvg = averageProcessingDays(list, 'pkvSubmitted', 'pkvDate');
+      return {
+        count: list.length, rechnungssumme, bezahlt, beihilfe, pkv, erstattet, eigenanteil, eigenanteilPct,
+        beihilfeDurationUnder: beihilfeDuration.under, beihilfeDurationOver: beihilfeDuration.over,
+        pkvDurationAvg
+      };
+    }
+
+    function getYears() {
+      const years = new Set(invoices.map(i => (i.date || '').slice(0, 4)).filter(Boolean));
+      years.add(String(new Date().getFullYear()));
+      return Array.from(years).sort().reverse();
+    }
+
+    // ── View switching ────────────────────────────────────────────────────────
+    function switchView(view) {
+      currentView = view;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+      const listViews = ['all', 'unpaid', 'open', 'beihilfe-open', 'beihilfe-pending', 'pkv-open', 'pkv-pending'];
+      document.getElementById('list-view').style.display = listViews.includes(view) ? '' : 'none';
+      document.getElementById('totals-view').style.display = view === 'totals' ? '' : 'none';
+      document.getElementById('years-view').style.display = view === 'years' ? '' : 'none';
+      document.getElementById('config-view').style.display = view === 'config' ? '' : 'none';
+      renderCurrentView();
+    }
+
+    // Shared predicates so "Unbezahlt"/"Offen" are each defined in exactly
+    // one place — reused by their own tabs, and by the "Alle" tab's diff
+    // header below, instead of three copies drifting apart over time.
+    function isUnpaid(i) { return !i.paid; }
+    // Offen = Beihilfe ODER PKV noch nicht eingereicht. Eingereicht, aber noch
+    // nicht erstattet zählt als "Abwarten" (eigene Tabs), nicht als offen —
+    // sonst wäre Offen nicht 0, obwohl "Beihilfe offen" und "PKV offen" 0 sind.
+    function isOpen(i) {
+      return !i.beihilfeSubmitted || !i.pkvSubmitted;
+    }
+
+    // Abwarten = eingereicht, aber noch nicht erstattet — je Stelle getrennt
+    // (entspricht den Tabs "Beihilfe abwarten" und "PKV abwarten").
+    function isBeihilfePending(i) { return i.beihilfeSubmitted && i.beihilfeAmount == null; }
+    function isPkvPending(i) { return i.pkvSubmitted && i.pkvAmount == null; }
+
+    function renderCurrentView() {
+      switch (currentView) {
+        case 'all': {
+          const diff = sum(invoices.filter(isUnpaid).map(i => i.amount)) - sum(invoices.filter(isOpen).map(i => i.amount)) - sum(invoices.filter(isBeihilfePending).map(i => i.amount)) - sum(invoices.filter(isPkvPending).map(i => i.amount));
+          renderList(invoices, 'Noch keine Rechnungen erfasst. Klicke auf „+ Neue Rechnung“.', diffHeaderHtml('Unbezahlt - Offen - Abwarten', diff));
+          break;
+        }
+        case 'unpaid': {
+          const list = invoices.filter(isUnpaid);
+          renderList(list, 'Alles bezahlt – keine unbezahlten Rechnungen.', sumHeaderHtml('Unbezahlt', list));
+          break;
+        }
+        case 'open': {
+          const list = invoices.filter(isOpen);
+          renderList(list, 'Keine offenen Rechnungen – Beihilfe und PKV sind für alle Rechnungen eingereicht.', sumHeaderHtml('Offen', list));
+          break;
+        }
+        case 'beihilfe-open': {
+          const list = invoices.filter(i => !i.beihilfeSubmitted);
+          renderList(list, 'Alle Rechnungen wurden bei der Beihilfe eingereicht.', sumHeaderHtml('Beihilfe offen', list, config.beihilfeRate));
+          break;
+        }
+        case 'beihilfe-pending': {
+          const list = invoices.filter(i => i.beihilfeSubmitted && i.beihilfeAmount == null);
+          renderList(list, 'Keine Rechnung wartet auf Erstattung von der Beihilfe.', sumHeaderHtml('Beihilfe abwarten', list, config.beihilfeRate));
+          break;
+        }
+        case 'pkv-open': {
+          const list = invoices.filter(i => !i.pkvSubmitted);
+          renderList(list, 'Alle Rechnungen wurden bei der PKV eingereicht.', sumHeaderHtml('PKV offen', list, i => pkvSuggested(i).amount));
+          break;
+        }
+        case 'pkv-pending': {
+          const list = invoices.filter(i => i.pkvSubmitted && i.pkvAmount == null);
+          renderList(list, 'Keine Rechnung wartet auf Erstattung von der PKV.', sumHeaderHtml('PKV abwarten', list, i => pkvSuggested(i).amount));
+          break;
+        }
+        case 'totals': renderTotals(); break;
+        case 'years': renderYears(); break;
+        case 'config': renderConfigForm(); break;
+      }
+    }
+
+    // Builds the "Summe {kind} (N Rechnungen)" banner shown above the
+    // Unbezahlt/Offen lists — sums exactly the list that view just filtered,
+    // so it always matches what's listed below it.
+    // rate, if given, is either:
+    //  - a fixed fraction (e.g. config.beihilfeRate) — Beihilfe pays a flat
+    //    rate regardless of which invoices are in the list, so the banner
+    //    always shows it, even for an empty list; or
+    //  - a function(inv) => estimated reimbursement — PKV's rate depends on
+    //    each invoice's position against the year's Eigenanteil threshold,
+    //    so there is no single config value to show; it's derived from the
+    //    list instead (and only shown once there's something to derive it
+    //    from).
+    function sumHeaderHtml(kind, list, rate) {
+      const total = sum(list.map(i => i.amount));
+      let extra = '';
+      if (typeof rate === 'number') {
+        const amount = Math.round(total * rate * 100) / 100;
+        extra = ` <span class="list-sum-extra">( ${Math.round(rate * 100)}% = ${fmtEUR(amount)} )</span>`;
+      } else if (typeof rate === 'function' && total > 0) {
+        const estTotal = sum(list.map(rate));
+        const pct = (estTotal / total) * 100;
+        extra = ` <span class="list-sum-extra">( ${Math.round(pct)}% = ${fmtEUR(estTotal)} )</span>`;
+      }
+      return `<div class="stat-card list-sum-card">
+        <div class="stat-label">Summe ${kind} (${list.length} ${list.length === 1 ? 'Rechnung' : 'Rechnungen'})</div>
+        <div class="stat-value list-sum-value">${fmtEUR(total)}${extra}</div>
+      </div>`;
+    }
+
+    // Same banner shape, but for a single already-computed value (the
+    // "Alle" tab's Unbezahlt − Offen − Abwarten) rather than a list to sum itself.
+    function diffHeaderHtml(label, value) {
+      return `<div class="stat-card list-sum-card">
+        <div class="stat-label">${label}</div>
+        <div class="stat-value list-sum-value">${fmtEUR(value)}</div>
+      </div>`;
+    }
+
+    // Shared red/yellow/green status logic — used by both the list badges
+    // and the single-invoice modal, so the colors always mean the same thing
+    // everywhere: rot = noch nicht eingereicht, gelb = eingereicht aber noch
+    // nicht erstattet, grün = erstattet.
+    function reimbursementBadgeClass(submittedDate, amount) {
+      if (amount != null) return 'b-active';
+      if (submittedDate) return 'b-pending';
+      return 'b-open';
+    }
+
+    // Tooltip text for a reimbursement badge, mirroring reimbursementBadgeClass's
+    // three states. `label` names the payer ("Beihilfe"/"PKV") for the wording.
+    function reimbursementBadgeTitle(label, submittedDate, amount) {
+      if (amount != null) return `${label} wurde erstattet`;
+      if (submittedDate) return `${label} eingereicht, aber noch nicht erstattet`;
+      return `Noch nicht bei der ${label} eingereicht`;
+    }
+
+    // Disambiguates repeated identical titles (e.g. several invoices for the
+    // same medication) with a stable "(Nr. N)" purely for display — never
+    // written back to the invoice's actual title. Numbered chronologically
+    // (oldest = Nr. 1) across ALL invoices sharing that title, regardless of
+    // which filtered view is currently shown, so the number stays consistent
+    // everywhere. Returns null when the title is unique (nothing to disambiguate).
+    function titleOccurrenceNumber(inv) {
+      const sameTitle = invoices
+        .filter(i => i.title === inv.title)
+        .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.id || 0) - (b.id || 0));
+      if (sameTitle.length <= 1) return null;
+      const idx = sameTitle.findIndex(i => i.id === inv.id);
+      return idx >= 0 ? idx + 1 : null;
+    }
+
+    function invoiceRowHtml(inv) {
+      const beihState = reimbursementBadgeClass(inv.beihilfeSubmitted, inv.beihilfeAmount);
+      const beihLabel = inv.beihilfeSubmitted ? (inv.beihilfeAmount != null ? 'Beihilfe ✓' : 'Beihilfe …') : 'Beihilfe offen';
+      const beihTitle = reimbursementBadgeTitle('Beihilfe', inv.beihilfeSubmitted, inv.beihilfeAmount);
+      const pkvState = reimbursementBadgeClass(inv.pkvSubmitted, inv.pkvAmount);
+      const pkvLabel = inv.pkvSubmitted ? (inv.pkvAmount != null ? 'PKV ✓' : 'PKV …') : 'PKV offen';
+      const pkvTitle = reimbursementBadgeTitle('PKV', inv.pkvSubmitted, inv.pkvAmount);
+      const occNum = titleOccurrenceNumber(inv);
+      return `
+        <div class="inv-row" data-id="${inv.id}">
+          <div class="inv-main">
+            <div class="inv-title">${escapeHtml(inv.title)}${occNum ? ` <span class="inv-title-num">(Nr. ${occNum})</span>` : ''}</div>
+            <div class="inv-sub">${fmtDE(inv.date)} · ${fmtEUR(inv.amount)}${inv.dueDate ? ' · Fällig ' + fmtDE(inv.dueDate) : ''}</div>
+          </div>
+          <div class="inv-badges">
+            <span class="badge ${inv.paid ? 'b-active' : 'b-open'}" title="${inv.paid ? 'Rechnung wurde bezahlt' : 'Noch nicht bezahlt'}">${inv.paid ? 'Bezahlt' : 'Unbezahlt'}</span>
+            <span class="badge ${beihState}" title="${beihTitle}">${beihLabel}</span>
+            <span class="badge ${pkvState}" title="${pkvTitle}">${pkvLabel}</span>
+          </div>
+        </div>`;
+    }
+
+    function renderList(list, emptyMsg, sumHtml) {
+      const container = document.getElementById('list-view');
+      const sorted = [...list].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      if (sorted.length === 0) {
+        container.innerHTML = `${sumHtml || ''}<div class="empty-hint">${emptyMsg}</div>`;
+        return;
+      }
+      container.innerHTML = (sumHtml || '') + sorted.map(invoiceRowHtml).join('');
+      container.querySelectorAll('.inv-row').forEach(el => {
+        el.addEventListener('click', () => openInvoiceModal(Number(el.dataset.id)));
+      });
+    }
+
+    function populateYearSelect() {
+      const sel = document.getElementById('totals-year');
+      const years = getYears();
+      const current = sel.value || String(new Date().getFullYear());
+      sel.innerHTML = ['<option value="all">Alle Jahre</option>', ...years.map(y => `<option value="${y}">${y}</option>`)].join('');
+      sel.value = years.includes(current) ? current : (years[0] || 'all');
+    }
+
+    function renderTotals() {
+      populateYearSelect();
+      const year = document.getElementById('totals-year').value;
+      const list = year === 'all' ? invoices : invoices.filter(i => (i.date || '').slice(0, 4) === year);
+      const a = aggregate(list);
+      document.getElementById('totals-grid').innerHTML = `
+        <div class="stat-card"><div class="stat-label">Rechnungen</div><div class="stat-value">${a.count}</div></div>
+        <div class="stat-card"><div class="stat-label">Rechnungssumme</div><div class="stat-value">${fmtEUR(a.rechnungssumme)}</div></div>
+        <div class="stat-card"><div class="stat-label">Bezahlt</div><div class="stat-value">${fmtEUR(a.bezahlt)}</div></div>
+        <div class="stat-card"><div class="stat-label">Erstattet (Beihilfe + PKV)</div><div class="stat-value">${fmtEUR(a.erstattet)}</div></div>
+        <div class="stat-card"><div class="stat-label">Eigenanteil absolut</div><div class="stat-value">${fmtEUR(a.eigenanteil)}</div></div>
+        <div class="stat-card"><div class="stat-label">Eigenanteil in %</div><div class="stat-value">${fmtPct(a.eigenanteilPct)}</div></div>
+        <div class="stat-card" title="Rechnungen mit gleichem Beihilfe-Einreichungsdatum gelten als eine gemeinsame Einreichung; Summe unter 5.000 €"><div class="stat-label">Beihilfe: Ø Bearbeitungsdauer (&lt; 5.000 €)</div><div class="stat-value">${fmtDays(a.beihilfeDurationUnder)}</div></div>
+        <div class="stat-card" title="Rechnungen mit gleichem Beihilfe-Einreichungsdatum gelten als eine gemeinsame Einreichung; Summe ab 5.000 €"><div class="stat-label">Beihilfe: Ø Bearbeitungsdauer (&ge; 5.000 €)</div><div class="stat-value">${fmtDays(a.beihilfeDurationOver)}</div></div>
+        <div class="stat-card" title="Durchschnitt über alle Rechnungen mit Einreichungs- UND Erstattungsdatum"><div class="stat-label">PKV: Ø Bearbeitungsdauer</div><div class="stat-value">${fmtDays(a.pkvDurationAvg)}</div></div>
+      `;
+    }
+
+    function renderYears() {
+      const years = getYears();
+      const rows = years.map(y => {
+        const a = aggregate(invoices.filter(i => (i.date || '').slice(0, 4) === y));
+        return `<tr>
+          <td>${y}</td><td>${a.count}</td><td>${fmtEUR(a.rechnungssumme)}</td>
+          <td>${fmtEUR(a.bezahlt)}</td><td>${fmtEUR(a.beihilfe)}</td><td>${fmtEUR(a.pkv)}</td>
+          <td>${fmtEUR(a.eigenanteil)}</td><td>${fmtPct(a.eigenanteilPct)}</td>
+        </tr>`;
+      }).join('');
+      document.getElementById('years-table').innerHTML = `
+        <thead><tr>
+          <th>Jahr</th><th>Anzahl</th><th>Rechnungssumme</th><th>Bezahlt</th>
+          <th>Beihilfe</th><th>PKV</th><th>Eigenanteil</th><th>Eigenanteil %</th>
+        </tr></thead>
+        <tbody>${rows || '<tr><td colspan="8" style="text-align:center;color:var(--muted);">Keine Daten vorhanden.</td></tr>'}</tbody>
+      `;
+    }
+
+    function renderConfigForm() {
+      const form = document.getElementById('config-form');
+      form.innerHTML = `
+        <div class="form-section-title">Erstattungssätze</div>
+        <div class="form-row"><label>Beihilfe-Satz (%)</label><input type="number" step="0.1" min="0" max="100" id="cfg-beihilfe" value="${(config.beihilfeRate * 100).toFixed(1)}"></div>
+        <div class="form-row"><label>PKV-Satz niedrig (%)</label><input type="number" step="0.1" min="0" max="100" id="cfg-pkv-low" value="${(config.pkvRateLow * 100).toFixed(1)}"></div>
+        <div class="form-row"><label>PKV-Satz hoch, nach Erreichen des Eigenanteils (%)</label><input type="number" step="0.1" min="0" max="100" id="cfg-pkv-high" value="${(config.pkvRateHigh * 100).toFixed(1)}"></div>
+        <div class="form-row"><label>Eigenanteil-Schwelle pro Jahr (€)</label><input type="number" step="1" min="0" id="cfg-threshold" value="${config.eigenanteilThreshold}"></div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Speichern</button>
+          <button type="button" class="btn btn-outline" id="cfg-reset">Zurücksetzen auf Standard</button>
+        </div>
+      `;
+      form.onsubmit = async e => {
+        e.preventDefault();
+        config = {
+          beihilfeRate: parseFloat(document.getElementById('cfg-beihilfe').value) / 100,
+          pkvRateLow: parseFloat(document.getElementById('cfg-pkv-low').value) / 100,
+          pkvRateHigh: parseFloat(document.getElementById('cfg-pkv-high').value) / 100,
+          eigenanteilThreshold: parseFloat(document.getElementById('cfg-threshold').value)
+        };
+        await dbPutConfig(config);
+        showToast('Konfiguration gespeichert.');
+      };
+      document.getElementById('cfg-reset').onclick = async () => {
+        config = Object.assign({}, DEFAULT_CONFIG);
+        await dbPutConfig(config);
+        renderConfigForm();
+        showToast('Auf Standardwerte zurückgesetzt.');
+      };
+    }
+
+    // ── Modal (view / edit / new) ─────────────────────────────────────────────
+    function blankInvoice() {
+      // No `id` field here on purpose — IndexedDB's autoIncrement key
+      // generator only assigns a fresh key when the keyPath property is
+      // absent/undefined. An explicit `id: null` would be treated as a
+      // real (invalid) key instead.
+      return {
+        title: '', date: todayIso(), amount: null, dueDate: '',
+        paid: false, paidDate: '',
+        beihilfeSubmitted: '', beihilfeAmount: null, beihilfeDate: '',
+        pkvSubmitted: '', pkvAmount: null, pkvDate: '',
+        notes: ''
+      };
+    }
+
+    function openInvoiceModal(id) {
+      modalInvoiceId = id;
+      modalMode = id == null ? 'edit' : 'view';
+      modalDraft = id == null ? blankInvoice() : Object.assign({}, invoices.find(i => i.id === id));
+      renderModal();
+      document.getElementById('modal-overlay').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('modal-overlay').style.display = 'none';
+      modalInvoiceId = null;
+      modalDraft = null;
+    }
+
+    function renderModal() {
+      if (modalMode === 'view') renderModalView(); else renderModalEdit();
+    }
+
+    // Bemerkungen sind jederzeit editierbar, unabhängig vom Bearbeiten-Modus
+    // — Auto-Save (debounced), ohne dass „Speichern“ im Formular nötig ist.
+    // Wird sowohl in renderModalView als auch renderModalEdit eingebunden.
+    function notesSectionHtml(inv) {
+      return `
+        <details class="notes-details" id="notes-details" ${inv.notes ? 'open' : ''}>
+          <summary class="notes-summary">${inv.notes ? 'Bemerkungen' : '+ Bemerkung hinzufügen'}</summary>
+          <textarea class="notes-textarea" id="notes-textarea" placeholder="Bemerkungen …">${escapeHtml(inv.notes || '')}</textarea>
+        </details>
+      `;
+    }
+
+    function wireNotesAutosave(inv) {
+      const notesDetails = document.getElementById('notes-details');
+      const notesTa = document.getElementById('notes-textarea');
+      let notesTimer;
+      const saveNotes = async () => {
+        clearTimeout(notesTimer);
+        const value = notesTa.value;
+        if (value === (inv.notes || '')) return;
+        inv.notes = value;
+        modalDraft.notes = value;
+        // Neue Rechnung (noch nicht gespeichert): nur im Draft vormerken,
+        // nicht per dbPutInvoice schreiben — sonst legt das "Speichern" im
+        // Formular anschließend einen zweiten, doppelten Datensatz an.
+        if (modalInvoiceId != null) {
+          await dbPutInvoice(inv);
+          const idx = invoices.findIndex(i => i.id === inv.id);
+          if (idx >= 0) invoices[idx] = Object.assign({}, invoices[idx], { notes: value });
+        }
+        notesDetails.querySelector('.notes-summary').textContent = value ? 'Bemerkungen' : '+ Bemerkung hinzufügen';
+      };
+      notesTa.addEventListener('input', () => {
+        clearTimeout(notesTimer);
+        notesTimer = setTimeout(saveNotes, 500);
+      });
+      notesTa.addEventListener('blur', saveNotes);
+    }
+
+    function renderModalView() {
+      const inv = modalDraft;
+      const r = invoiceReimbursement(inv);
+      const card = document.getElementById('modal-card');
+      card.innerHTML = `
+        <div class="modal-header"><h2>${escapeHtml(inv.title)}</h2><button class="btn-close" id="modal-close">✕</button></div>
+        <div class="detail-grid">
+          <div><span class="detail-label">Datum</span><span>${fmtDE(inv.date)}</span></div>
+          <div><span class="detail-label">Betrag</span><span>${fmtEUR(inv.amount)}</span></div>
+          <div><span class="detail-label">Zahlungsziel</span><span>${fmtDE(inv.dueDate)}</span></div>
+          <div><span class="detail-label">Bezahlt</span><span class="badge ${inv.paid ? 'b-active' : 'b-open'}" title="${inv.paid ? 'Rechnung wurde bezahlt' : 'Noch nicht bezahlt'}">${inv.paid ? 'Ja, am ' + fmtDE(inv.paidDate) : 'Nein'}</span></div>
+          <div><span class="detail-label">Beihilfe eingereicht</span><span>${fmtDE(inv.beihilfeSubmitted)}</span></div>
+          <div><span class="detail-label">Beihilfe erstattet</span><span class="badge ${reimbursementBadgeClass(inv.beihilfeSubmitted, inv.beihilfeAmount)}" title="${reimbursementBadgeTitle('Beihilfe', inv.beihilfeSubmitted, inv.beihilfeAmount)}">${inv.beihilfeAmount != null ? fmtEUR(inv.beihilfeAmount) + ' am ' + fmtDE(inv.beihilfeDate) : 'steht aus'}</span></div>
+          <div><span class="detail-label">PKV eingereicht</span><span>${fmtDE(inv.pkvSubmitted)}</span></div>
+          <div><span class="detail-label">PKV erstattet</span><span class="badge ${reimbursementBadgeClass(inv.pkvSubmitted, inv.pkvAmount)}" title="${reimbursementBadgeTitle('PKV', inv.pkvSubmitted, inv.pkvAmount)}">${inv.pkvAmount != null ? fmtEUR(inv.pkvAmount) + ' am ' + fmtDE(inv.pkvDate) : 'steht aus'}</span></div>
+          <div><span class="detail-label">Erstattung gesamt</span><span>${fmtEUR(r.total)} (${fmtPct(r.pct)})</span></div>
+          <div><span class="detail-label">Eigenanteil</span><span>${fmtEUR(r.eigen)} (${fmtPct(r.eigenPct)})</span></div>
+        </div>
+        ${notesSectionHtml(inv)}
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="modal-edit">Bearbeiten</button>
+          <button class="btn btn-danger" id="modal-delete">Löschen</button>
+          <button class="btn btn-outline" id="modal-copy-csv" title="In die Zwischenablage kopieren — zum Einfügen in Numbers/Excel" aria-label="In die Zwischenablage kopieren — zum Einfügen in Numbers/Excel">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+          <button class="btn btn-outline" id="modal-cancel">Schließen</button>
+        </div>
+      `;
+      document.getElementById('modal-close').onclick = closeModal;
+      document.getElementById('modal-cancel').onclick = closeModal;
+      document.getElementById('modal-edit').onclick = () => { modalMode = 'edit'; renderModal(); };
+      document.getElementById('modal-delete').onclick = async () => {
+        if (!confirm(`„${inv.title}“ wirklich löschen?`)) return;
+        await dbDeleteInvoice(inv.id);
+        invoices = invoices.filter(i => i.id !== inv.id);
+        closeModal();
+        renderCurrentView();
+        showToast('Rechnung gelöscht.');
+      };
+      document.getElementById('modal-copy-csv').onclick = async () => {
+        const tsv = invoiceToTsvRow(inv);
+        const html = invoiceToHtmlRow(inv);
+        try {
+          if (navigator.clipboard && window.ClipboardItem) {
+            await navigator.clipboard.write([
+              new ClipboardItem({
+                'text/plain': new Blob([tsv], { type: 'text/plain' }),
+                'text/html': new Blob([html], { type: 'text/html' })
+              })
+            ]);
+          } else {
+            await navigator.clipboard.writeText(tsv);
+          }
+          showToast('Kopiert — bereit zum Einfügen in Numbers/Excel.');
+        } catch (err) {
+          console.error('Kopieren fehlgeschlagen:', err);
+          try {
+            await navigator.clipboard.writeText(tsv);
+            showToast('Kopiert (Tab-getrennt) — bereit zum Einfügen.');
+          } catch (err2) {
+            alert('Kopieren in die Zwischenablage fehlgeschlagen: ' + err2.message);
+          }
+        }
+      };
+
+      wireNotesAutosave(inv);
+    }
+
+    function readFormIntoDraft() {
+      const paid = document.getElementById('f-paid').checked;
+      const beihAmountRaw = document.getElementById('f-beih-amount').value;
+      const pkvAmountRaw = document.getElementById('f-pkv-amount').value;
+      const draft = {
+        title: document.getElementById('f-title').value.trim(),
+        date: document.getElementById('f-date').value,
+        amount: parseFloat(document.getElementById('f-amount').value) || null,
+        dueDate: document.getElementById('f-due').value,
+        paid,
+        paidDate: paid ? document.getElementById('f-paid-date').value : '',
+        beihilfeSubmitted: document.getElementById('f-beih-sub').value,
+        beihilfeAmount: beihAmountRaw !== '' ? parseFloat(beihAmountRaw) : null,
+        beihilfeDate: document.getElementById('f-beih-date').value,
+        pkvSubmitted: document.getElementById('f-pkv-sub').value,
+        pkvAmount: pkvAmountRaw !== '' ? parseFloat(pkvAmountRaw) : null,
+        pkvDate: document.getElementById('f-pkv-date').value,
+        // The notes textarea sits outside <form id="invoice-form"> (see
+        // notesSectionHtml/wireNotesAutosave) and auto-saves independently.
+        // Carry the current value over here so saving other fields through
+        // this form never wipes it.
+        notes: (modalDraft && modalDraft.notes) || ''
+      };
+      // Omit `id` entirely for a new invoice (modalInvoiceId == null) so
+      // IndexedDB's autoIncrement generator assigns a fresh key — see the
+      // comment in blankInvoice() for why `id: null` breaks put().
+      if (modalInvoiceId != null) draft.id = modalInvoiceId;
+      return draft;
+    }
+
+    function renderModalEdit() {
+      const inv = modalDraft;
+      const isNew = modalInvoiceId == null;
+      const card = document.getElementById('modal-card');
+      card.innerHTML = `
+        <div class="modal-header">
+          <h2>${isNew ? 'Neue Rechnung' : 'Rechnung bearbeiten'}</h2>
+          <div style="display:flex;align-items:center;gap:0.4rem;">
+            ${isNew ? `
+            <button type="button" class="btn btn-outline" id="modal-paste-clipboard" title="Formular aus Zwischenablage befüllen — z.B. eine auf dem Mac kopierte Rechnungszeile, die per Universal Clipboard auch auf dem iPhone verfügbar ist" aria-label="Aus Zwischenablage einfügen">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"></path><rect x="9" y="3" width="6" height="4" rx="2" ry="2"></rect></svg>
+            </button>` : ''}
+            <button class="btn-close" id="modal-close">✕</button>
+          </div>
+        </div>
+        <form id="invoice-form">
+          <div class="form-section-title">Rechnung</div>
+          <div class="form-row"><label>Titel *</label><input type="text" id="f-title" value="${escapeHtml(inv.title)}" required></div>
+          <div class="form-row-2">
+            <div class="form-row"><label>Datum *</label><input type="date" id="f-date" value="${inv.date || ''}" required></div>
+            <div class="form-row"><label>Betrag (€) *</label><input type="number" step="0.01" min="0" id="f-amount" value="${inv.amount != null ? inv.amount : ''}" required></div>
+          </div>
+          <div class="form-row-2">
+            <div class="form-row"><label>Zahlungsziel</label><input type="date" id="f-due" value="${inv.dueDate || ''}"></div>
+            <div class="form-row checkbox-row">
+              <label><input type="checkbox" id="f-paid" ${inv.paid ? 'checked' : ''}> Bezahlt</label>
+              <input type="date" id="f-paid-date" value="${inv.paidDate || ''}" ${inv.paid ? '' : 'disabled'} style="width:auto;flex:1;">
+            </div>
+          </div>
+
+          <div class="form-section-title">Beihilfe</div>
+          <div class="form-row-2">
+            <div class="form-row"><label>Eingereicht am</label><input type="date" id="f-beih-sub" value="${inv.beihilfeSubmitted || ''}"></div>
+            <div class="form-row"><label>Erstattungsdatum</label><input type="date" id="f-beih-date" value="${inv.beihilfeDate || ''}"></div>
+          </div>
+          <div class="form-row">
+            <label>Erstatteter Betrag (€)</label>
+            <input type="number" step="0.01" min="0" id="f-beih-amount" value="${inv.beihilfeAmount != null ? inv.beihilfeAmount : ''}">
+            <div class="form-hint" id="hint-beih"></div>
+          </div>
+
+          <div class="form-section-title">PKV</div>
+          <div class="form-row-2">
+            <div class="form-row"><label>Eingereicht am</label><input type="date" id="f-pkv-sub" value="${inv.pkvSubmitted || ''}"></div>
+            <div class="form-row"><label>Erstattungsdatum</label><input type="date" id="f-pkv-date" value="${inv.pkvDate || ''}"></div>
+          </div>
+          <div class="form-row">
+            <label>Erstatteter Betrag (€)</label>
+            <input type="number" step="0.01" min="0" id="f-pkv-amount" value="${inv.pkvAmount != null ? inv.pkvAmount : ''}">
+            <div class="form-hint" id="hint-pkv"></div>
+          </div>
+        </form>
+        ${notesSectionHtml(inv)}
+        <div class="modal-actions">
+          <button type="submit" form="invoice-form" class="btn btn-primary">Speichern</button>
+          <button type="button" class="btn btn-outline" id="modal-cancel">Abbrechen</button>
+        </div>
+      `;
+
+      document.getElementById('modal-close').onclick = closeModal;
+      document.getElementById('modal-cancel').onclick = closeModal;
+
+      const paidCb = document.getElementById('f-paid');
+      const paidDateInput = document.getElementById('f-paid-date');
+      ['f-beih-sub', 'f-pkv-sub'].forEach(id => {
+        const el = document.getElementById(id);
+        el.addEventListener('focus', () => {
+          if (!el.value) el.value = todayIso();
+        });
+      });
+      paidCb.addEventListener('change', () => {
+        paidDateInput.disabled = !paidCb.checked;
+        if (paidCb.checked && !paidDateInput.value) paidDateInput.value = todayIso();
+      });
+
+      function refreshHints() {
+        const draftNow = readFormIntoDraft();
+        const bS = draftNow.amount ? beihilfeSuggested(draftNow) : 0;
+        const pS = draftNow.amount ? pkvSuggested(draftNow) : { amount: 0, rate: config.pkvRateLow, cumulativeBefore: 0 };
+        document.getElementById('hint-beih').innerHTML =
+          `Vorschlag (${(config.beihilfeRate * 100).toFixed(0)}%): ${fmtEUR(bS)} <button type="button" class="btn-hint-apply" id="apply-beih">übernehmen</button>`;
+        document.getElementById('hint-pkv').innerHTML =
+          `Vorschlag (${(pS.rate * 100).toFixed(0)}%, bisheriger Eigenanteil ${fmtEUR(pS.cumulativeBefore || 0)}): ${fmtEUR(pS.amount)} <button type="button" class="btn-hint-apply" id="apply-pkv">übernehmen</button>`;
+        document.getElementById('apply-beih').onclick = () => {
+          document.getElementById('f-beih-amount').value = bS.toFixed(2);
+          const dateEl = document.getElementById('f-beih-date');
+          if (!dateEl.value) dateEl.value = todayIso();
+        };
+        document.getElementById('apply-pkv').onclick = () => {
+          document.getElementById('f-pkv-amount').value = pS.amount.toFixed(2);
+          const dateEl = document.getElementById('f-pkv-date');
+          if (!dateEl.value) dateEl.value = todayIso();
+        };
+      }
+      refreshHints();
+      document.getElementById('f-amount').addEventListener('input', refreshHints);
+      document.getElementById('f-date').addEventListener('input', refreshHints);
+
+      // Maps cell values, positionally, onto our invoice fields — in exactly
+      // CLIPBOARD_FIELD_DEFS' order (title, date, amount, dueDate, paid,
+      // paidDate, beihilfeSubmitted, beihilfeAmount, beihilfeDate,
+      // pkvSubmitted, pkvAmount, pkvDate, notes), the same order the default
+      // clipboard schema already uses. Cell text is loose-parsed with the
+      // same helpers CSV import uses, since both a Numbers cell and a
+      // pbpaste-style tab-separated string are locale-formatted display
+      // strings ("23.04.2026", "1.234,56 €", "Ja"), not raw values.
+      function cellsToInvoiceValues(cells) {
+        const cell = i => cells[i] != null ? cells[i] : '';
+        return {
+          title: cell(0),
+          date: parseDateLoose(cell(1)),
+          amount: parseNumberLoose(cell(2)),
+          dueDate: parseDateLoose(cell(3)),
+          paid: parseBoolLoose(cell(4)),
+          paidDate: parseDateLoose(cell(5)),
+          beihilfeSubmitted: parseDateLoose(cell(6)),
+          beihilfeAmount: parseNumberLoose(cell(7)),
+          beihilfeDate: parseDateLoose(cell(8)),
+          pkvSubmitted: parseDateLoose(cell(9)),
+          pkvAmount: parseNumberLoose(cell(10)),
+          pkvDate: parseDateLoose(cell(11)),
+          notes: cell(12),
+        };
+      }
+
+      const pasteBtn = document.getElementById('modal-paste-clipboard');
+      if (pasteBtn) {
+        pasteBtn.onclick = async () => {
+          let html = '';
+          let plainText = '';
+          try {
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+              if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+              if (item.types.includes('text/plain')) plainText = await (await item.getType('text/plain')).text();
+            }
+            if (!html && !plainText) plainText = await navigator.clipboard.readText();
+          } catch (err) {
+            console.error('Lesen der Zwischenablage fehlgeschlagen:', err, html);
+            alert('Lesen der Zwischenablage fehlgeschlagen: ' + err.message);
+            return;
+          }
+          const doc = html ? new DOMParser().parseFromString(html, 'text/html') : null;
+          const table = doc ? doc.querySelector('table[data-medicalc-invoice]') : null;
+          let values;
+          if (table) {
+            try {
+              values = JSON.parse(table.getAttribute('data-medicalc-invoice'));
+            } catch (err) {
+              console.error('Rechnungsdaten in der Zwischenablage sind beschädigt:', err, html);
+              alert('Rechnungsdaten in der Zwischenablage konnten nicht gelesen werden.');
+              return;
+            }
+          } else {
+            // Not our own round-trip format (e.g. a row copied directly out
+            // of Numbers, with no data-medicalc-invoice payload) — fall
+            // back to the first plain <table> row, positionally.
+            const plainRow = doc ? doc.querySelector('table tr') : null;
+            if (plainRow) {
+              values = cellsToInvoiceValues(Array.from(plainRow.querySelectorAll('td,th')).map(c => c.textContent.trim()));
+            } else {
+              // No table at all (e.g. `pbpaste`-style plain text, or a
+              // browser/OS clipboard that only ever exposed text/plain) —
+              // if it's tab-separated, treat it the same way, one row taken
+              // from the first non-empty line.
+              const firstLine = plainText ? (plainText.split(/\r\n|\r|\n/).find(l => l.trim() !== '') || '') : '';
+              if (!firstLine.includes('\t')) {
+                console.log(html || plainText);
+                alert('In der Zwischenablage wurde keine Tabelle und kein Tab-getrennter Text mit Rechnungsdaten gefunden.');
+                return;
+              }
+              values = cellsToInvoiceValues(firstLine.split('\t').map(c => c.trim()));
+            }
+          }
+          document.getElementById('f-title').value = values.title || '';
+          document.getElementById('f-date').value = values.date || '';
+          document.getElementById('f-amount').value = values.amount != null ? values.amount : '';
+          document.getElementById('f-due').value = values.dueDate || '';
+          paidCb.checked = !!values.paid;
+          paidDateInput.disabled = !values.paid;
+          paidDateInput.value = values.paidDate || '';
+          document.getElementById('f-beih-sub').value = values.beihilfeSubmitted || '';
+          document.getElementById('f-beih-amount').value = values.beihilfeAmount != null ? values.beihilfeAmount : '';
+          document.getElementById('f-beih-date').value = values.beihilfeDate || '';
+          document.getElementById('f-pkv-sub').value = values.pkvSubmitted || '';
+          document.getElementById('f-pkv-amount').value = values.pkvAmount != null ? values.pkvAmount : '';
+          document.getElementById('f-pkv-date').value = values.pkvDate || '';
+          refreshHints();
+          showToast('Formular aus Zwischenablage befüllt — bitte prüfen.');
+        };
+      }
+
+      document.getElementById('invoice-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const draft = readFormIntoDraft();
+        if (!draft.title || !draft.date || !draft.amount) {
+          alert('Bitte Titel, Datum und Betrag ausfüllen.');
+          return;
+        }
+        try {
+          const id = await dbPutInvoice(draft);
+          draft.id = id;
+          const idx = invoices.findIndex(i => i.id === id);
+          if (idx >= 0) invoices[idx] = draft; else invoices.push(draft);
+          closeModal();
+          renderCurrentView();
+          showToast('Rechnung gespeichert.');
+        } catch (err) {
+          console.error('Speichern fehlgeschlagen:', err);
+          alert('Speichern fehlgeschlagen: ' + err.message);
+        }
+      });
+
+      wireNotesAutosave(inv);
+    }
+
+    // ── CSV export / import ───────────────────────────────────────────────────
+    // Semicolon-delimited (Excel-DE friendly), dot-decimal numbers, UTF-8 BOM
+    // for correct Umlaut display when opened in Excel/Numbers.
+    const CSV_HEADERS = [
+      'Titel', 'Datum', 'Betrag', 'Zahlungsziel', 'Bezahlt', 'BezahltAm',
+      'BeihilfeEingereicht', 'BeihilfeBetrag', 'BeihilfeErstattungsdatum',
+      'PKVEingereicht', 'PKVBetrag', 'PKVErstattungsdatum', 'Bemerkungen'
+    ];
+
+    function csvEscape(value) {
+      const s = String(value == null ? '' : value);
+      if (/[;"\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+    function numForCsv(n) { return typeof n === 'number' && !isNaN(n) ? n.toFixed(2) : ''; }
+
+    function invoiceToCsvRow(inv) {
+      return [
+        inv.title, inv.date || '', numForCsv(inv.amount), inv.dueDate || '',
+        inv.paid ? 'Ja' : 'Nein', inv.paidDate || '',
+        inv.beihilfeSubmitted || '', numForCsv(inv.beihilfeAmount), inv.beihilfeDate || '',
+        inv.pkvSubmitted || '', numForCsv(inv.pkvAmount), inv.pkvDate || '',
+        inv.notes || ''
+      ].map(csvEscape).join(';');
+    }
+
+    // Numbers (and Excel) split pasted plain text into columns on TAB, not
+    // semicolon — a semicolon-CSV row pastes as one single cell.
+    //
+    // Values are rendered as final German-locale display strings (comma
+    // decimals with a "€" suffix for currency, "TT.MM.JJJJ" for dates)
+    // rather than left for Numbers to auto-detect: dot-decimal amounts
+    // (e.g. "12.03") are ambiguous with German dot-separated dates and can
+    // get misread as a date, which comma decimals avoid entirely.
+    function deDateForClipboard(iso) {
+      if (!iso) return '';
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+      if (!m) return iso;
+      return `${m[3]}.${m[2]}.${m[1]}`;
+    }
+    function deCurrencyForClipboard(n) {
+      if (typeof n !== 'number' || isNaN(n)) return '';
+      return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    }
+
+    // ── Clipboard column schema (configurable target-table layout) ─────────
+    // The real Numbers sheet a row gets pasted into typically has more
+    // columns than we have data for — grouped/computed "Hilfsspalten" (e.g.
+    // percentage-split formulas) sit between our fields and must stay
+    // blank. This schema maps each of our invoice fields to a target
+    // column index in that wider row; unmapped/unlisted columns are left
+    // empty. Defaults to a plain 1:1 layout (our original fixed 13 columns,
+    // no gaps) until the user configures it via the gear icon.
+    const CLIPBOARD_SCHEMA_KEY = 'medicalc-clipboard-schema-v1';
+    const CLIPBOARD_FIELD_DEFS = [
+      { key: 'title', label: 'Titel / Leistung' },
+      { key: 'date', label: 'Rechnungsdatum' },
+      { key: 'amount', label: 'Betrag' },
+      { key: 'dueDate', label: 'Zahlungsziel' },
+      { key: 'paid', label: 'Bezahlt (Ja/Nein)' },
+      { key: 'paidDate', label: 'Bezahlt am' },
+      { key: 'beihilfeSubmitted', label: 'Beihilfe eingereicht' },
+      { key: 'beihilfeAmount', label: 'Beihilfe erstatteter Betrag' },
+      { key: 'beihilfeDate', label: 'Beihilfe erstattet am' },
+      { key: 'pkvSubmitted', label: 'PKV eingereicht' },
+      { key: 'pkvAmount', label: 'PKV erstatteter Betrag' },
+      { key: 'pkvDate', label: 'PKV erstattet am' },
+      { key: 'notes', label: 'Bemerkung' }
+    ];
+    function defaultClipboardSchema() {
+      const mapping = {};
+      CLIPBOARD_FIELD_DEFS.forEach((f, i) => { mapping[f.key] = i; });
+      return { columnCount: CLIPBOARD_FIELD_DEFS.length, mapping, headerLabels: [] };
+    }
+    function loadClipboardSchema() {
+      try {
+        const raw = localStorage.getItem(CLIPBOARD_SCHEMA_KEY);
+        if (!raw) return defaultClipboardSchema();
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed.columnCount !== 'number' || !parsed.mapping) return defaultClipboardSchema();
+        return parsed;
+      } catch (err) {
+        console.error('Clipboard-Schema konnte nicht geladen werden:', err);
+        return defaultClipboardSchema();
+      }
+    }
+    function saveClipboardSchema(schema) {
+      localStorage.setItem(CLIPBOARD_SCHEMA_KEY, JSON.stringify(schema));
+    }
+
+    function invoiceClipboardValues(inv) {
+      return {
+        title: inv.title || '',
+        date: deDateForClipboard(inv.date),
+        amount: deCurrencyForClipboard(inv.amount),
+        dueDate: deDateForClipboard(inv.dueDate),
+        paid: inv.paid ? 'Ja' : 'Nein',
+        paidDate: deDateForClipboard(inv.paidDate),
+        beihilfeSubmitted: deDateForClipboard(inv.beihilfeSubmitted),
+        beihilfeAmount: deCurrencyForClipboard(inv.beihilfeAmount),
+        beihilfeDate: deDateForClipboard(inv.beihilfeDate),
+        pkvSubmitted: deDateForClipboard(inv.pkvSubmitted),
+        pkvAmount: deCurrencyForClipboard(inv.pkvAmount),
+        pkvDate: deDateForClipboard(inv.pkvDate),
+        notes: inv.notes || ''
+      };
+    }
+    function invoiceClipboardFields(inv) {
+      const schema = loadClipboardSchema();
+      const values = invoiceClipboardValues(inv);
+      const mappedIndices = CLIPBOARD_FIELD_DEFS
+        .map(def => schema.mapping[def.key])
+        .filter(idx => idx != null && idx >= 0 && idx < schema.columnCount);
+      // Paste always fills starting at the selected cell — if our row's
+      // first element is an unmapped/blank helper column (e.g. an
+      // auto-numbered "Nr" column nobody ever clicks into), that blank cell
+      // lands on the selected cell and every real value shifts one column
+      // too far right. Trimming to [first mapped, last mapped] makes the
+      // row's first element the first cell that should actually receive a
+      // value, matching where the user places the cursor before pasting.
+      if (mappedIndices.length === 0) return [];
+      const minIndex = Math.min(...mappedIndices);
+      const maxIndex = Math.max(...mappedIndices);
+      const row = new Array(maxIndex - minIndex + 1).fill('');
+      for (const def of CLIPBOARD_FIELD_DEFS) {
+        const idx = schema.mapping[def.key];
+        if (idx != null && idx >= 0 && idx < schema.columnCount) {
+          row[idx - minIndex] = String(values[def.key] == null ? '' : values[def.key]).replace(/[\t\r\n]+/g, ' ');
+        }
+      }
+      return row;
+    }
+    function invoiceToTsvRow(inv) {
+      return invoiceClipboardFields(inv).join('\t');
+    }
+
+    // Numbers only reliably splits a pasted row into separate cells when the
+    // clipboard also carries an HTML table — plain TSV text alone (no
+    // text/html) was found to land entirely in a single cell. Since the
+    // values here are already rendered as final German-locale display
+    // strings (comma decimals, "€", "TT.MM.JJJJ"), Numbers doesn't need to
+    // auto-detect their type; it just needs the <table> to know where the
+    // column breaks are.
+    // Inline font-size/family on both <table> and each <td> — Numbers'
+    // rich-text paste otherwise falls back to its own default (Times 12pt)
+    // instead of the sheet's existing style, and clipboard-consuming apps
+    // commonly ignore inherited (non-inline) CSS.
+    // Use px, not pt: the HTML→Numbers paste importer reads the computed
+    // pixel size and stores that number directly as the point size,
+    // skipping CSS's own pt→px (×4/3) scaling — so "10pt" here would render
+    // at 13.33px and land in Numbers as a 13.33pt font. "10px" avoids that
+    // extra factor and lands as the intended 10pt.
+    const CLIPBOARD_CELL_STYLE = "font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:10px;";
+
+    // Raw (locale-independent) field values for round-tripping through our
+    // own app's clipboard-paste-into-form feature — embedded as a JSON
+    // data-* attribute on the <table>. Numbers ignores unknown attributes
+    // on paste (it only reads visible cell text), but reading this back via
+    // navigator.clipboard.read()'s text/html gives us the exact original
+    // ISO date / numeric amount / boolean straight back, with no need to
+    // reverse-parse the locale-formatted display strings (which — depending
+    // on the configured schema — can't even always be recovered, e.g. a
+    // schema with no dedicated "bezahlt" column has nothing to parse).
+    function invoiceRawPayload(inv) {
+      return {
+        title: inv.title || '',
+        date: inv.date || '',
+        amount: inv.amount != null ? inv.amount : null,
+        dueDate: inv.dueDate || '',
+        paid: !!inv.paid,
+        paidDate: inv.paidDate || '',
+        beihilfeSubmitted: inv.beihilfeSubmitted || '',
+        beihilfeAmount: inv.beihilfeAmount != null ? inv.beihilfeAmount : null,
+        beihilfeDate: inv.beihilfeDate || '',
+        pkvSubmitted: inv.pkvSubmitted || '',
+        pkvAmount: inv.pkvAmount != null ? inv.pkvAmount : null,
+        pkvDate: inv.pkvDate || '',
+        notes: inv.notes || ''
+      };
+    }
+    function invoiceToHtmlRow(inv) {
+      const tds = invoiceClipboardFields(inv)
+        .map(v => `<td style="${CLIPBOARD_CELL_STYLE}">${escapeHtml(v)}</td>`)
+        .join('');
+      const payload = escapeHtml(JSON.stringify(invoiceRawPayload(inv)));
+      return `<table data-medicalc-invoice="${payload}" style="${CLIPBOARD_CELL_STYLE}border-collapse:collapse;"><tr>${tds}</tr></table>`;
+    }
+
+    // ── Clipboard schema configuration modal ────────────────────────────────
+    // Tab-delimited, quote-aware (a Numbers header row can contain a quoted
+    // field with an embedded newline, e.g. a wrapped "Eigenanteil\nin %"
+    // column label) — same quoting rules as parseCsvRows below, but split on
+    // TAB since that's what a Numbers row-copy puts on the clipboard.
+    function parseTsvRows(text) {
+      const rows = [];
+      let row = [], field = '', inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQuotes) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i++; }
+            else inQuotes = false;
+          } else field += c;
+          continue;
+        }
+        if (c === '"') inQuotes = true;
+        else if (c === '\t') { row.push(field); field = ''; }
+        else if (c === '\r') { /* ignore, \n handles the row break */ }
+        else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+        else field += c;
+      }
+      if (field !== '' || row.length) { row.push(field); rows.push(row); }
+      return rows.filter(r => !(r.length === 1 && r[0].trim() === ''));
+    }
+
+    // A Numbers header is often two rows: sparse/merged group titles (only
+    // the group's first column has text, the rest are blank) over the
+    // actual per-column names. Forward-fill the group text across its blank
+    // cells and combine "Gruppe – Spalte" so identically-named columns in
+    // different groups (e.g. "Eingereicht" under both Beihilfe and PKV)
+    // stay distinguishable in the dropdowns below.
+    function buildColumnLabels(rows) {
+      if (rows.length === 0) return [];
+      if (rows.length === 1) return rows[0].map(s => s.trim());
+      const groupRow = rows[0], nameRow = rows[1];
+      const count = Math.max(groupRow.length, nameRow.length);
+      let currentGroup = '';
+      const labels = [];
+      for (let i = 0; i < count; i++) {
+        const g = (groupRow[i] || '').trim();
+        if (g) currentGroup = g;
+        const name = (nameRow[i] || '').trim();
+        labels.push(currentGroup && name ? `${currentGroup} – ${name}` : (name || currentGroup || `Spalte ${i + 1}`));
+      }
+      return labels;
+    }
+
+    // Best-effort starting guess after (re-)parsing a pasted header, purely
+    // to save clicks — every field stays freely reassignable via its own
+    // dropdown afterward, so a wrong guess here costs nothing.
+    function guessMappingFromLabels(labels) {
+      const lower = labels.map(l => l.toLowerCase());
+      const used = new Set();
+      const find = pred => {
+        for (let i = 0; i < lower.length; i++) {
+          if (used.has(i)) continue;
+          if (pred(lower[i])) { used.add(i); return i; }
+        }
+        return null;
+      };
+      return {
+        title: find(l => l.includes('leistung') || l.includes('titel')),
+        date: find(l => l.includes('rechnungsdatum')),
+        amount: find(l => l.includes('betrag') && !l.includes('beihilfe') && !l.includes('pkv') && !l.includes('erstattet') && !l.includes('eigenanteil')),
+        dueDate: find(l => l.includes('zu zahlen bis') || l.includes('zahlungsziel')),
+        paid: null,
+        paidDate: find(l => l.includes('bez.') || l.includes('bezahlt am')),
+        beihilfeSubmitted: find(l => l.includes('beihilfe') && l.includes('eingereicht')),
+        beihilfeAmount: find(l => l.includes('beihilfe') && l.includes('erstatteter betrag')),
+        beihilfeDate: find(l => l.includes('beihilfe') && l.includes('erstattet am')),
+        pkvSubmitted: find(l => l.includes('pkv') && l.includes('eingereicht')),
+        pkvAmount: find(l => l.includes('pkv') && l.includes('erstatteter betrag')),
+        pkvDate: find(l => l.includes('pkv') && l.includes('erstattet am')),
+        notes: find(l => l.includes('bemerkung'))
+      };
+    }
+
+    let schemaDraft = null; // { columnCount, mapping, headerLabels } while the modal is open
+
+    function closeSchemaModal() {
+      document.getElementById('schema-modal-overlay').style.display = 'none';
+      schemaDraft = null;
+    }
+
+    function renderSchemaModal() {
+      const card = document.getElementById('schema-modal-card');
+      const labels = schemaDraft.headerLabels;
+      const optionsHtml = idx => {
+        let html = `<option value="">— leer lassen —</option>`;
+        for (let i = 0; i < schemaDraft.columnCount; i++) {
+          const label = labels[i] || `Spalte ${i + 1}`;
+          const selected = schemaDraft.mapping[idx] === i ? 'selected' : '';
+          html += `<option value="${i}" ${selected}>Spalte ${i + 1}: ${escapeHtml(label)}</option>`;
+        }
+        return html;
+      };
+      card.innerHTML = `
+        <div class="modal-header"><h2>Spaltenschema (Numbers)</h2><button class="btn-close" id="schema-modal-close">✕</button></div>
+        <p class="form-hint" style="margin-bottom:0.75rem;">
+          Kopfzeile(n) aus der Ziel-Tabelle in Numbers kopieren (Gruppen- und/oder Spaltennamen-Zeile) und hier einfügen.
+          Eine Beispielzeile allein reicht nicht, da leere Hilfsspalten darin nicht unterscheidbar sind.
+          Beim Einfügen in Numbers die Zelle der <em>ersten zugeordneten Spalte</em> markieren (z. B. "Leistung"), nicht eine davor liegende, unzugeordnete Hilfsspalte.
+        </p>
+        <div class="form-row">
+          <label for="schema-header-paste">Kopfzeile(n) einfügen</label>
+          <textarea id="schema-header-paste" class="notes-textarea" style="min-height:70px;" placeholder="Hier einfügen (Cmd+V) …"></textarea>
+        </div>
+        <div class="form-actions" style="margin-top:0;margin-bottom:1rem;">
+          <button class="btn btn-outline" id="schema-header-apply" type="button">Kopfzeile(n) übernehmen</button>
+          <span class="form-hint" style="margin:0;">${schemaDraft.columnCount} Spalte(n) erkannt</span>
+        </div>
+        <div class="schema-mapping-grid">
+          ${CLIPBOARD_FIELD_DEFS.map(def => `
+            <div class="schema-mapping-row">
+              <label for="schema-map-${def.key}">${escapeHtml(def.label)}</label>
+              <select id="schema-map-${def.key}" data-field="${def.key}">${optionsHtml(def.key)}</select>
+            </div>
+          `).join('')}
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="schema-save">Speichern</button>
+          <button class="btn btn-outline" id="schema-reset">Zurücksetzen</button>
+          <button class="btn btn-outline" id="schema-cancel">Abbrechen</button>
+        </div>
+      `;
+      document.getElementById('schema-modal-close').onclick = closeSchemaModal;
+      document.getElementById('schema-cancel').onclick = closeSchemaModal;
+      document.getElementById('schema-header-apply').onclick = () => {
+        const text = document.getElementById('schema-header-paste').value;
+        const rows = parseTsvRows(text);
+        if (rows.length === 0) { alert('Keine Kopfzeile erkannt — bitte Text einfügen.'); return; }
+        const newLabels = buildColumnLabels(rows);
+        schemaDraft = { columnCount: newLabels.length, mapping: guessMappingFromLabels(newLabels), headerLabels: newLabels };
+        renderSchemaModal();
+      };
+      document.getElementById('schema-reset').onclick = () => {
+        schemaDraft = defaultClipboardSchema();
+        renderSchemaModal();
+      };
+      CLIPBOARD_FIELD_DEFS.forEach(def => {
+        document.getElementById(`schema-map-${def.key}`).onchange = e => {
+          const v = e.target.value;
+          schemaDraft.mapping[def.key] = v === '' ? null : parseInt(v, 10);
+        };
+      });
+      document.getElementById('schema-save').onclick = () => {
+        saveClipboardSchema(schemaDraft);
+        closeSchemaModal();
+        showToast('Spaltenschema gespeichert.');
+      };
+    }
+
+    function openSchemaModal() {
+      const saved = loadClipboardSchema();
+      schemaDraft = { columnCount: saved.columnCount, mapping: Object.assign({}, saved.mapping), headerLabels: (saved.headerLabels || []).slice() };
+      renderSchemaModal();
+      document.getElementById('schema-modal-overlay').style.display = 'flex';
+    }
+
+    async function exportCsv() {
+      if (invoices.length === 0) { alert('Keine Rechnungen zum Exportieren vorhanden.'); return; }
+      const rows = [CSV_HEADERS.join(';'), ...invoices.map(invoiceToCsvRow)];
+      const BOM = String.fromCharCode(0xFEFF); // so Excel/Numbers detect UTF-8 correctly
+      const csv = BOM + rows.join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const fileName = `medicalc_export_${todayIso()}.csv`;
+
+      // Share sheet on touch devices (incl. iPad), download elsewhere — see save-file.js.
+      try {
+        const result = await window.saveFile(blob, fileName);
+        if (result === 'downloaded') showToast(`Exportiert: ${fileName}`);
+      } catch (err) {
+        alert('Teilen fehlgeschlagen: ' + err.message);
+      }
+    }
+
+    function parseCsvRows(text) {
+      const rows = [];
+      let row = [], field = '', inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQuotes) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i++; }
+            else inQuotes = false;
+          } else field += c;
+          continue;
+        }
+        if (c === '"') inQuotes = true;
+        else if (c === ';') { row.push(field); field = ''; }
+        else if (c === '\r') { /* ignore, \n handles the row break */ }
+        else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+        else field += c;
+      }
+      if (field !== '' || row.length) { row.push(field); rows.push(row); }
+      return rows.filter(r => !(r.length === 1 && r[0].trim() === ''));
+    }
+
+    function parseNumberLoose(s) {
+      if (s == null || s === '') return null;
+      // Strip currency symbols/whitespace first — "258,49 €" or "€ 258.49"
+      // would otherwise fail the exact-format checks below and get
+      // silently truncated by parseFloat (e.g. "258,49 €" → 258).
+      let t = String(s).trim().replace(/[€$£\s]/g, '');
+      if (t === '') return null;
+      if (/^-?\d{1,3}(\.\d{3})*,\d+$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');       // 1.234,56
+      else if (/^-?\d+,\d+$/.test(t)) t = t.replace(',', '.');                                     // 234,56
+      else if (/^-?\d{1,3}(,\d{3})*\.\d+$/.test(t)) t = t.replace(/,/g, '');                        // 1,234.56 (US)
+      const n = parseFloat(t);
+      return isNaN(n) ? null : n;
+    }
+    function parseBoolLoose(s) {
+      const t = String(s || '').trim().toLowerCase();
+      return ['ja', 'y', 'yes', 'true', '1', 'x', '✅', '✓', '✔'].includes(t);
+    }
+    // Accepts ISO (YYYY-MM-DD) as-is, and converts German D.M.YY / D.M.YYYY /
+    // DD.MM.YYYY (leading zeros optional, 2-digit year → 20YY) to ISO. Any
+    // other/unrecognized format is passed through unchanged rather than
+    // silently discarded, so at least the raw value isn't lost.
+    function parseDateLoose(s) {
+      if (s == null) return '';
+      const t = String(s).trim();
+      if (t === '') return '';
+      if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(t)) {
+        const [y, mo, d] = t.split('-');
+        return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+      let m = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})$/);      // 23.04.26 / 26.4.26 / 23.04.2026
+      if (!m) m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);  // 23/04/26 (rarer, but seen)
+      if (m) {
+        const d = m[1].padStart(2, '0');
+        const mo = m[2].padStart(2, '0');
+        const y = m[3].length === 2 ? '20' + m[3] : m[3];
+        return `${y}-${mo}-${d}`;
+      }
+      return t;
+    }
+
+    async function importCsv(text) {
+      const clean = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+      const rows = parseCsvRows(clean);
+      if (rows.length < 2) return { imported: 0, skipped: 0 };
+      // Case-insensitive, trimmed header matching so minor spelling/casing
+      // differences in a manually-maintained sheet still map correctly.
+      const header = rows[0].map(h => h.trim().toLowerCase());
+      const idx = name => header.indexOf(name.toLowerCase());
+      let imported = 0, skipped = 0;
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const title = row[idx('Titel')] || '';
+        const date = parseDateLoose(row[idx('Datum')]);
+        const amount = parseNumberLoose(row[idx('Betrag')]);
+        if (!title || !date || amount == null) { skipped++; continue; }
+        const inv = {
+          title, date, amount,
+          dueDate: parseDateLoose(row[idx('Zahlungsziel')]),
+          paid: parseBoolLoose(row[idx('Bezahlt')]),
+          paidDate: parseDateLoose(row[idx('BezahltAm')]),
+          beihilfeSubmitted: parseDateLoose(row[idx('BeihilfeEingereicht')]),
+          beihilfeAmount: parseNumberLoose(row[idx('BeihilfeBetrag')]),
+          beihilfeDate: parseDateLoose(row[idx('BeihilfeErstattungsdatum')]),
+          pkvSubmitted: parseDateLoose(row[idx('PKVEingereicht')]),
+          pkvAmount: parseNumberLoose(row[idx('PKVBetrag')]),
+          pkvDate: parseDateLoose(row[idx('PKVErstattungsdatum')]),
+          notes: row[idx('Bemerkungen')] || ''
+        };
+        await dbPutInvoice(inv);
+        imported++;
+      }
+      return { imported, skipped };
+    }
+
+    async function handleImportChange(e) {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const { imported, skipped } = await importCsv(text);
+        invoices = await dbGetAllInvoices();
+        renderCurrentView();
+        showToast(`${imported} Rechnung(en) importiert (hinzugefügt)${skipped ? ', ' + skipped + ' Zeile(n) übersprungen' : ''}.`);
+      } catch (err) {
+        alert('CSV-Import fehlgeschlagen: ' + err.message);
+      }
+    }
+
+    // ── Wiring / boot ─────────────────────────────────────────────────────────
+    function wireUpUi() {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchView(btn.dataset.view));
+      });
+      document.getElementById('btn-new').addEventListener('click', () => openInvoiceModal(null));
+      document.getElementById('btn-export').addEventListener('click', exportCsv);
+      document.getElementById('btn-import').addEventListener('click', () => document.getElementById('import-input').click());
+      document.getElementById('import-input').addEventListener('change', handleImportChange);
+      document.getElementById('modal-overlay').addEventListener('click', e => {
+        if (e.target.id === 'modal-overlay') closeModal();
+      });
+      document.getElementById('btn-clipboard-schema').addEventListener('click', openSchemaModal);
+      document.getElementById('schema-modal-overlay').addEventListener('click', e => {
+        if (e.target.id === 'schema-modal-overlay') closeSchemaModal();
+      });
+      document.getElementById('totals-year').addEventListener('change', renderTotals);
+    }
+
+    function hideBootLoader() {
+      const el = document.getElementById('boot-loader');
+      if (!el) return;
+      el.classList.add('boot-loader-hidden');
+      setTimeout(() => el.remove(), 300);
+    }
+
+    async function boot() {
+      const statusEl = document.getElementById('boot-loader-status');
+      if (statusEl) {
+        statusEl.textContent = navigator.onLine ? 'Daten werden geladen …' : 'Offline-Modus – lokale Daten werden geladen …';
+      }
+      try {
+        config = Object.assign({}, DEFAULT_CONFIG, (await dbGetConfig()) || {});
+        invoices = await dbGetAllInvoices();
+      } catch (err) {
+        console.error('MediCalc: Datenbank-Initialisierung fehlgeschlagen:', err);
+        config = Object.assign({}, DEFAULT_CONFIG);
+        invoices = [];
+        if (statusEl) statusEl.textContent = 'Fehler beim Laden der Datenbank – starte mit leerer Ansicht …';
+      }
+      wireUpUi();
+      switchView('all');
+      hideBootLoader();
+    }
+
+    // Safety net: never let the loader block the app if boot() hangs for some
+    // unexpected reason.
+    setTimeout(hideBootLoader, 8000);
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', boot);
+    } else {
+      boot();
+    }
+  })();
+  </script>
+  <script src="update.js"></script>
+  <script src="save-file.js"></script>
+  <script src="bulk-import.js"></script>
+</body>
+</html>

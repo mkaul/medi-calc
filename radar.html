@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="de" translate="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Spinnennetz</title>
+  <meta name="description" content="Gesundheits-Spinnennetz: Blutwerte als Radar-Chart pro Messzeitpunkt – vollständig clientseitig.">
+
+  <!-- PWA / Web App Manifest -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="shortcut icon" href="favicon.ico">
+
+  <!-- iOS Safari Home Screen -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Spinnennetz">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="apple-touch-icon-precomposed" href="apple-touch-icon-precomposed.png">
+
+  <!-- Theme colour (Android Chrome address bar) -->
+  <meta name="theme-color" content="#0b0f19">
+
+  <!-- Tells the browser up front that this page is dark-only, so it paints
+       the initial canvas background dark from the very first frame instead
+       of its default white (see the same fix on blutbild.html). -->
+  <meta name="color-scheme" content="dark">
+  <style>
+    html { background: #0b0f19; }
+  </style>
+
+  <!-- Inline, dependency-free critical CSS for the boot loader below —
+       see blutbild.html for the rationale (identical mechanism here). -->
+  <style>
+    #boot-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      background: #0b0f19;
+      color: #cbd5e1;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      transition: opacity 0.25s ease;
+    }
+    #boot-loader.boot-loader-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #boot-loader-spinner {
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 50%;
+      border: 3px solid rgba(203, 213, 225, 0.25);
+      border-top-color: #6366f1;
+      animation: boot-loader-spin 0.8s linear infinite;
+    }
+    #boot-loader-status {
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 0 1.5rem;
+    }
+    @keyframes boot-loader-spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+
+  <!-- style.css loaded non-render-blocking (preload + swap), same as blutbild.html. -->
+  <link rel="preload" href="style.css" as="style" onload="this.onload=null;this.rel='stylesheet';window.__onAppStylesReady && window.__onAppStylesReady();">
+  <noscript>
+    <link rel="stylesheet" href="style.css">
+    <style>#boot-loader { display: none !important; }</style>
+  </noscript>
+  <!-- Konfiguration: öffentlich (config-system.js) + persönlich (config-user.js,
+       optional, nicht im Repository) → APP_CONFIG; lädt auch private Module. -->
+  <script src="config-system.js"></script>
+  <script src="config-user.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+
+  <div id="boot-loader">
+    <div id="boot-loader-spinner"></div>
+    <div id="boot-loader-status">App wird geladen …</div>
+  </div>
+  <script>
+    (function () {
+      var statusEl = document.getElementById('boot-loader-status');
+      if (statusEl) {
+        statusEl.textContent = navigator.onLine
+          ? 'App wird geladen …'
+          : 'Offline-Modus – lokale Daten werden geladen …';
+      }
+      function hideBootLoader() {
+        var el = document.getElementById('boot-loader');
+        if (!el) return;
+        el.classList.add('boot-loader-hidden');
+        setTimeout(function () { el.remove(); }, 300);
+      }
+      window.__onAppStylesReady = hideBootLoader;
+      setTimeout(hideBootLoader, 5000);
+    })();
+  </script>
+
+  <header>
+    <div class="title-container">
+      <h1>🕸️ Gesundheits-Spinnennetz</h1>
+      <p class="subtitle">Blutwerte als Radar-Chart, pro Messzeitpunkt.</p>
+    </div>
+    <div id="hbm-root"></div>
+  </header>
+
+  <main>
+    <section class="glass-panel analytics-panel" aria-label="Gesundheits-Spinnennetz">
+      <div class="analytics-header">
+        <h2>Gesundheits-Spinnennetz</h2>
+        <p>Score pro Blutwert-Parameter relativ zum Referenzbereich, für einen wählbaren Messzeitpunkt.</p>
+      </div>
+
+      <div class="radar-section" id="radar-section" style="display: none;">
+        <div class="radar-layout">
+          <div class="radar-canvas-wrap">
+            <canvas id="radar-canvas-a" style="opacity:1;z-index:2;"></canvas>
+            <canvas id="radar-canvas-b" style="opacity:0;z-index:1;"></canvas>
+          </div>
+          <div class="radar-sidebar">
+            <div class="radar-score-box">
+              <span class="radar-score-label">Ø Gesundheits-Score</span>
+              <span class="radar-score-value" id="radar-score-value">—</span>
+              <span class="radar-score-sub" id="radar-score-sub"></span>
+            </div>
+            <div class="radar-legend" id="radar-legend"></div>
+          </div>
+        </div>
+        <div class="radar-slider-group">
+          <span class="radar-date-edge" id="radar-date-min" title="Älteste Messung">—</span>
+          <div class="radar-slider-wrap">
+            <input type="range" id="radar-slider" min="0" max="0" value="0" class="radar-slider">
+            <span class="radar-date-display" id="radar-date-display">—</span>
+          </div>
+          <span class="radar-date-edge" id="radar-date-max" title="Jüngste Messung">—</span>
+        </div>
+      </div>
+
+      <div class="empty-state" id="radar-empty-state">
+        <span class="empty-icon" style="font-size: 2.5rem;">🕸️</span>
+        <h3>Noch keine Blutwerte vorhanden</h3>
+        <p>Bitte zuerst in "Blutbild via OCR" einen Scan durchführen.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Stand-alone Client-side Tool &bull; Läuft vollständig offline</p>
+  </footer>
+
+  <!-- Chart.js Library Load -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+  <!-- Shared blood-marker data layer (same one blutbild.html uses) -->
+  <script src="blood-data.js"></script>
+  <!-- Page script -->
+  <script src="radar.js"></script>
+
+  <!-- Service Worker registration — identical pattern to every other page. -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
+    }
+  </script>
+
+  <!-- Must come after header-menu.js — bulk-import.js looks up header-menu-
+       generated elements (#btn-bulk-export, #btn-bulk-import, #btn-reset-all)
+       immediately at script-run time, not on DOMContentLoaded. -->
+  <script src="header-menu.js"></script>
+  <script>createHeaderMenu({ current: 'radar' });</script>
+  <script src="update.js"></script>
+  <script src="save-file.js"></script>
+  <script src="bulk-import.js"></script>
+</body>
+</html>

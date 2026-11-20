@@ -1,0 +1,7 @@
+.DS_Store
+node_modules/
+
+# Persönliche Daten – nie veröffentlichen (siehe README „Konfiguration“)
+config-user.js
+private/
+.claude/

@@ -1,0 +1,183 @@
+{
+  "metadata": {
+    "description": "Referenzbereiche für Vollblutbildwerte (Complete Blood Count - CBC)",
+    "hinweis": "Die Referenzbereiche sind typische Normwerte für Erwachsene. Sie können je nach Labor leicht variieren. Manche Werte sind geschlechtsspezifisch und sind mit (m) für Männer und (w) für Frauen gekennzeichnet.",
+    "erstellt": "2026-06-10"
+  },
+  "blutwerte": [
+    {
+      "name": "WBC",
+      "bedeutung": "White Blood Cells (Weiße Blutkörperchen)",
+      "einheit": "10^3/µL",
+      "min": 4.5,
+      "max": 11.0,
+      "notiz": "Gesamtzahl aller weißen Blutkörperchen"
+    },
+    {
+      "name": "RBC",
+      "bedeutung": "Red Blood Cells (Rote Blutkörperchen)",
+      "einheit": "10^6/µL",
+      "min_m": 4.5,
+      "max_m": 5.9,
+      "min_w": 4.1,
+      "max_w": 5.1,
+      "notiz": "Geschlechtsspezifische Referenzbereiche (m=Männer, w=Frauen)"
+    },
+    {
+      "name": "HGB",
+      "bedeutung": "Hämoglobin",
+      "einheit": "g/dL",
+      "min_m": 13.5,
+      "max_m": 17.5,
+      "min_w": 12.0,
+      "max_w": 15.5,
+      "notiz": "Geschlechtsspezifische Referenzbereiche (m=Männer, w=Frauen)"
+    },
+    {
+      "name": "HCT",
+      "bedeutung": "Hämatokrit (Anteil der roten Blutkörperchen)",
+      "einheit": "%",
+      "min_m": 41,
+      "max_m": 53,
+      "min_w": 36,
+      "max_w": 46,
+      "notiz": "Geschlechtsspezifische Referenzbereiche (m=Männer, w=Frauen)"
+    },
+    {
+      "name": "MCV",
+      "bedeutung": "Mean Corpuscular Volume (mittleres Zellvolumen)",
+      "einheit": "fL",
+      "min": 80,
+      "max": 100,
+      "notiz": "Durchschnittliche Größe der roten Blutkörperchen"
+    },
+    {
+      "name": "MCH",
+      "bedeutung": "Mean Corpuscular Hemoglobin (mittlerer Hämoglobingehalt)",
+      "einheit": "pg",
+      "min": 27,
+      "max": 33,
+      "notiz": "Durchschnittlicher Hämoglobingehalt pro rotes Blutkörperchen"
+    },
+    {
+      "name": "MCHC",
+      "bedeutung": "Mean Corpuscular Hemoglobin Concentration",
+      "einheit": "g/dL",
+      "min": 32,
+      "max": 36,
+      "notiz": "Durchschnittliche Hämoglobinkonzentration in den roten Blutkörperchen"
+    },
+    {
+      "name": "PLT",
+      "bedeutung": "Platelets (Blutplättchen)",
+      "einheit": "10^3/µL",
+      "min": 150,
+      "max": 400,
+      "notiz": "Anzahl der Blutplättchen (wichtig für Blutgerinnung)"
+    },
+    {
+      "name": "RDW-SD",
+      "bedeutung": "Red Cell Distribution Width - Standard Deviation",
+      "einheit": "fL",
+      "min": 39,
+      "max": 46,
+      "notiz": "Maß für die Größenverteilung der roten Blutkörperchen"
+    },
+    {
+      "name": "RDW-CV",
+      "bedeutung": "Red Cell Distribution Width - Coefficient of Variation",
+      "einheit": "%",
+      "min": 11.5,
+      "max": 14.5,
+      "notiz": "Prozentuale Größenvariation der roten Blutkörperchen"
+    },
+    {
+      "name": "PDW",
+      "bedeutung": "Platelet Distribution Width",
+      "einheit": "fL",
+      "min": 9,
+      "max": 17,
+      "notiz": "Größenverteilung der Blutplättchen"
+    },
+    {
+      "name": "MPV",
+      "bedeutung": "Mean Platelet Volume (mittleres Blutplättchenvolumen)",
+      "einheit": "fL",
+      "min": 7.4,
+      "max": 10.4,
+      "notiz": "Durchschnittliche Größe der Blutplättchen"
+    },
+    {
+      "name": "P-LCR",
+      "bedeutung": "Platelet Large Cell Ratio",
+      "einheit": "%",
+      "min": 16,
+      "max": 35,
+      "notiz": "Anteil der großen Blutplättchen"
+    },
+    {
+      "name": "PCT",
+      "bedeutung": "Plateletcrit",
+      "einheit": "%",
+      "min": 0.17,
+      "max": 0.35,
+      "notiz": "Anteil der Blutplättchen am Blutvolumen"
+    },
+    {
+      "name": "NRBC",
+      "bedeutung": "Nucleated Red Blood Cells (Kernhaltige rote Blutkörperchen)",
+      "einheit": "10^3/µL",
+      "min": 0,
+      "max": 0.02,
+      "notiz": "Normalerweise nicht vorhanden oder nur in Spuren"
+    },
+    {
+      "name": "NEUT",
+      "bedeutung": "Neutrophils (Neutrophile Granulozyten)",
+      "einheit": "10^3/µL",
+      "min": 2.0,
+      "max": 7.5,
+      "notiz": "Häufigste Art der weißen Blutkörperchen, erste Linie der Abwehr"
+    },
+    {
+      "name": "LYMPH",
+      "bedeutung": "Lymphocytes (Lymphozyten)",
+      "einheit": "10^3/µL",
+      "min": 1.0,
+      "max": 4.8,
+      "notiz": "Wichtig für spezifische Immunabwehr"
+    },
+    {
+      "name": "MONO",
+      "bedeutung": "Monocytes (Monozyten)",
+      "einheit": "10^3/µL",
+      "min": 0.2,
+      "max": 0.9,
+      "notiz": "Große Phagozyten, umwandeln sich zu Makrophagen"
+    },
+    {
+      "name": "EO",
+      "bedeutung": "Eosinophils (Eosinophile Granulozyten)",
+      "einheit": "10^3/µL",
+      "min": 0.04,
+      "max": 0.4,
+      "notiz": "Beteiligt bei Allergien und parasitären Infektionen"
+    },
+    {
+      "name": "BASO",
+      "bedeutung": "Basophils (Basophile Granulozyten)",
+      "einheit": "10^3/µL",
+      "min": 0,
+      "max": 0.1,
+      "notiz": "Seltenste Art der weißen Blutkörperchen, Rolle bei Allergien"
+    },
+    {
+      "name": "IG",
+      "bedeutung": "Immature Granulocytes (Unreife Granulozyten)",
+      "einheit": "10^3/µL",
+      "min": 0,
+      "max": 0.05,
+      "notiz": "Unreife Vorläuferzellen, normalerweise nicht oder nur minimal vorhanden"
+    }
+  ]
+}
